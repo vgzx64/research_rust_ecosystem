@@ -3,3 +3,4 @@ repos_mirror
 .DS_Store
 test/
 *.csv
+__pycache__/
