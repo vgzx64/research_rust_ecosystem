@@ -1,2 +1,4 @@
 *.csv
 .ipynb_checkpoints/
+git_data_cache/
+__pycache__/
