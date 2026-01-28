@@ -43,8 +43,7 @@ class GitDataExtractor:
             if key in self.domain:
                 return value
 
-        # print(f"Warning: No token found for domain '{self.domain}'. Proceeding without authentication.")
-        return None
+        raise Exception(f"No token found for {self.domain}")
 
     def _parse_url_metadata(self):
         """Extracts repo and engine info from the URL."""
@@ -118,33 +117,29 @@ class GitDataExtractor:
         
         # Check if cache exists
         if os.path.exists(os.path.join(cache_path, "main.json")):
-            print(f"Loading from cache: {cache_path}")
             return self._load_from_cache(cache_path)
         
-        # If not, fetch from API
-        print(f"Fetching from API: {self.repo_owner}/{self.repo_name}...")
-        
-        df_issue = None
-        df_activity = None
+        issue = None
+        activity = None
         
         if self.engine == 'github':
-            df_issue, df_activity = self._fetch_github()
+            issue, activity = self._fetch_github()
         elif self.engine == 'gitlab':
-            df_issue, df_activity = self._fetch_gitlab()
+            issue, activity = self._fetch_gitlab()
         elif self.engine == 'bitbucket':
-            df_issue, df_activity = self._fetch_bitbucket()
+            issue, activity = self._fetch_bitbucket()
         elif self.engine == 'forgejo':
-            df_issue, df_activity = self._fetch_forgejo()
+            issue, activity = self._fetch_forgejo()
         elif self.engine == 'sourcehut':
-            df_issue, df_activity = self._fetch_srht()
+            issue, activity = self._fetch_srht()
         else:
             return None, None
 
         # Save to cache if successful
-        if df_issue is not None:
-            self._save_to_cache(cache_path, df_issue, df_activity)
+        if issue is not None:
+            self._save_to_cache(cache_path, issue, activity)
             
-        return df_issue, df_activity
+        return issue, activity
 
     # --- GitHub (GraphQL) ---
     def _fetch_github(self):
@@ -362,8 +357,6 @@ class GitDataExtractor:
         with open(os.path.join(path, "activity.json"), 'w') as f:
             json.dump(activity_data, f, indent=2)
             
-        print(f"Saved to cache: {path}")
-
     def _load_from_cache(self, path):
         """Loads raw dicts/lists from JSON in the cache directory."""
         with open(os.path.join(path, "main.json"), 'r') as f:
