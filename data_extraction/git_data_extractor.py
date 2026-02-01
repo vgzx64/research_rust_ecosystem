@@ -366,3 +366,155 @@ class GitDataExtractor:
             activity_data = json.load(f)
             
         return issue_data, activity_data
+
+    def get_pr_commits(self):
+        """Get all commits from a PR with their messages.
+        
+        Returns:
+            list: List of dictionaries with keys: hash, message, url
+        """
+        if not self.is_pr:
+            return []
+        
+        try:
+            if self.engine == 'github':
+                # GitHub REST API: GET /repos/{owner}/{repo}/pulls/{pull_number}/commits
+                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/pulls/{self.issue_number}/commits"
+                headers = {"Authorization": f"Bearer {self.token}"}
+                response = requests.get(api_url, headers=headers)
+                if response.status_code == 200:
+                    commits_data = response.json()
+                    return [{
+                        'hash': commit['sha'],
+                        'message': commit['commit']['message'],
+                        'url': commit['html_url']
+                    } for commit in commits_data]
+            
+            elif self.engine == 'gitlab':
+                # GitLab REST API: GET /projects/{id}/merge_requests/{iid}/commits
+                project_enc = requests.utils.quote(f"{self.repo_owner}/{self.repo_name}", safe='')
+                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/merge_requests/{self.issue_number}/commits"
+                headers = {"PRIVATE-TOKEN": self.token}
+                response = requests.get(api_url, headers=headers)
+                if response.status_code == 200:
+                    commits_data = response.json()
+                    return [{
+                        'hash': commit['id'],
+                        'message': commit['message'],
+                        'url': commit['web_url']
+                    } for commit in commits_data]
+            
+            # For other platforms or on error
+            return []
+            
+        except Exception as e:
+            print(f"Error getting commits from PR {self.url}: {e}")
+            return []
+
+    def get_commit_by_hash(self, commit_hash):
+        """
+        Get commit details for a specific commit hash in the current repo.
+        
+        Args:
+            commit_hash (str): Commit hash
+            
+        Returns:
+            dict: Commit details with keys: hash, message, url, author, date, etc.
+                  Returns None if not found or error.
+        """
+        try:
+            if self.engine == 'github':
+                # GitHub REST API: GET /repos/{owner}/{repo}/commits/{sha}
+                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/commits/{commit_hash}"
+                headers = {"Authorization": f"token {self.token}"}
+                response = requests.get(api_url, headers=headers)
+                if response.status_code == 200:
+                    commit_data = response.json()
+                    return {
+                        'hash': commit_data['sha'],
+                        'message': commit_data['commit']['message'],
+                        'url': commit_data['html_url'],
+                        'author': commit_data['commit']['author']['name'] if commit_data['commit']['author'] else None,
+                        'date': commit_data['commit']['author']['date'] if commit_data['commit']['author'] else None
+                    }
+                elif response.status_code == 404:
+                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                    return None
+            
+            elif self.engine == 'gitlab':
+                # GitLab REST API: GET /projects/{id}/repository/commits/{sha}
+                project_enc = requests.utils.quote(f"{self.repo_owner}/{self.repo_name}", safe='')
+                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/repository/commits/{commit_hash}"
+                headers = {"PRIVATE-TOKEN": self.token}
+                response = requests.get(api_url, headers=headers)
+                if response.status_code == 200:
+                    commit_data = response.json()
+                    return {
+                        'hash': commit_data['id'],
+                        'message': commit_data['message'],
+                        'url': commit_data['web_url'],
+                        'author': commit_data['author_name'],
+                        'date': commit_data['authored_date']
+                    }
+                elif response.status_code == 404:
+                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                    return None
+            
+            elif self.engine == 'bitbucket':
+                # Bitbucket REST API: GET /repositories/{owner}/{repo}/commit/{sha}
+                api_url = f"https://api.bitbucket.org/2.0/repositories/{self.repo_owner}/{self.repo_name}/commit/{commit_hash}"
+                
+                # Bitbucket auth can be token or user:pass
+                auth = None
+                headers = {}
+                if ":" in self.token:
+                    user, pw = self.token.split(":", 1)
+                    auth = (user, pw)
+                else:
+                    headers = {"Authorization": f"Bearer {self.token}"}
+                
+                req_kwargs = {'url': api_url}
+                if auth: 
+                    req_kwargs['auth'] = auth
+                else: 
+                    req_kwargs['headers'] = headers
+                
+                response = requests.get(**req_kwargs)
+                if response.status_code == 200:
+                    commit_data = response.json()
+                    return {
+                        'hash': commit_data['hash'],
+                        'message': commit_data['message'],
+                        'url': f"https://bitbucket.org/{self.repo_owner}/{self.repo_name}/commits/{commit_hash}",
+                        'author': commit_data['author']['raw'] if 'author' in commit_data else None,
+                        'date': commit_data['date'] if 'date' in commit_data else None
+                    }
+                elif response.status_code == 404:
+                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                    return None
+            
+            elif self.engine == 'forgejo':  # Codeberg/Forgejo/Gitea
+                # Forgejo REST API: GET /repos/{owner}/{repo}/git/commits/{sha}
+                api_url = f"https://{self.domain}/api/v1/repos/{self.repo_owner}/{self.repo_name}/git/commits/{commit_hash}"
+                headers = {"Authorization": f"token {self.token}"}
+                response = requests.get(api_url, headers=headers)
+                if response.status_code == 200:
+                    commit_data = response.json()
+                    return {
+                        'hash': commit_data['sha'],
+                        'message': commit_data['commit']['message'],
+                        'url': f"https://{self.domain}/{self.repo_owner}/{self.repo_name}/commit/{commit_hash}",
+                        'author': commit_data['commit']['author']['name'] if commit_data['commit']['author'] else None,
+                        'date': commit_data['commit']['author']['date'] if commit_data['commit']['author'] else None
+                    }
+                elif response.status_code == 404:
+                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                    return None
+            
+            # For other platforms (sourcehut, etc.) or unsupported
+            print(f"Getting commit details not supported for {self.engine}")
+            return None
+            
+        except Exception as e:
+            print(f"Error getting commit {commit_hash} from {self.repo_owner}/{self.repo_name}: {e}")
+            return None
