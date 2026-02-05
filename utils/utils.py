@@ -24,7 +24,7 @@ def is_git_repo(path):
     
 def plot_evolution(x, y, ylabel, savepath, evol=True, xlog=False, ylog=False):
     plt.ioff()
-    plt.style.use('seaborn-colorblind') 
+    plt.style.use('seaborn-v0_8-colorblind') 
     fig, ax = plt.subplots(1, 1, figsize=(15, 10))
     ax.plot(x, y,color='navy')
     ax.set(ylabel=ylabel)
