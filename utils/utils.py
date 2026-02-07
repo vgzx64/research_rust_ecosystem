@@ -32,9 +32,19 @@ def plot_evolution(x, y, ylabel, savepath, evol=True, xlog=False, ylog=False):
     ax.yaxis.label.set_size(25)
     ax.title.set_size(20)
     if evol:
+        # Use YearLocator to ensure ticks at the start of each year
+        ax.xaxis.set_major_locator(mdates.YearLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
         ax.xaxis.set_minor_locator(mdates.MonthLocator())
         fig.autofmt_xdate()
+        
+        # Ensure the last year is included in the x-axis range
+        if len(x) > 0:
+            # Add small padding to ensure last year label appears
+            from pandas.tseries.offsets import DateOffset
+            x_min = x[0]
+            x_max = x[-1] + DateOffset(months=1)
+            ax.set_xlim(x_min, x_max)
     if xlog:
         ax.set_xscale('symlog')
     ax.grid(True, linestyle='--', which="major")
