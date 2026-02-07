@@ -1,5 +1,5 @@
 *.csv
 *.yaml
 .ipynb_checkpoints/
-git_data_cache/
+git_data_cache*/
 __pycache__/
