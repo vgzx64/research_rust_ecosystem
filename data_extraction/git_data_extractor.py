@@ -22,7 +22,7 @@ class GitDataExtractor:
         self.repo_name = None
         self.repo_url = None
         self.is_pr = False
-        self.issue_number = None
+        self.data_identifier = None
         
         # Initialize
         self._parse_url_metadata()
@@ -59,19 +59,21 @@ class GitDataExtractor:
             self.repo_owner = path_parts[0]
             self.repo_name = path_parts[1]
             type_str = path_parts[2]
-            self.issue_number = int(path_parts[3])
+            self.data_identifier = int(path_parts[3]) if path_parts[3].isnumeric() else path_parts[3]
             self.is_pr = (type_str == 'pull')
+            self.is_commit = (type_str == 'commit')
 
         elif 'gitlab' in self.domain:
             self.engine = 'gitlab'
             # owner/repo/-/issues/123 OR owner/repo/-/merge_requests/123
             # Regex is safer for GitLab due to possible sub-groups
-            match = re.search(r'gitlab\..*?/(.*?)/(.*?)/-/(issues|merge_requests)/(\d+)', self.url)
+            match = re.search(r'gitlab\..*?/(.*?)/(.*?)/-/(issues|merge_requests|commit)/(\d+)', self.url)
             if not match: raise ValueError("Invalid GitLab URL")
             self.repo_owner = match.group(1)
             self.repo_name = match.group(2)
             self.is_pr = (match.group(3) == 'merge_requests')
-            self.issue_number = int(match.group(4))
+            self.is_commit = (match.group(3) == 'commit')
+            self.data_identifier = int(match.group(4))
 
         elif 'bitbucket.org' in self.domain:
             self.engine = 'bitbucket'
@@ -80,7 +82,7 @@ class GitDataExtractor:
             self.repo_owner = path_parts[0]
             self.repo_name = path_parts[1]
             type_str = path_parts[2]
-            self.issue_number = int(path_parts[3])
+            self.data_identifier = int(path_parts[3])
             self.is_pr = (type_str == 'pullrequests') # Bitbucket uses pullrequests
 
         elif 'codeberg.org' in self.domain:
@@ -90,7 +92,7 @@ class GitDataExtractor:
             self.repo_owner = path_parts[0]
             self.repo_name = path_parts[1]
             self.is_pr = (path_parts[2] == 'pulls') # Codeberg uses /pulls
-            self.issue_number = int(path_parts[3])
+            self.data_identifier = int(path_parts[3])
 
         elif 'sr.ht' in self.domain:
             self.engine = 'sourcehut'
@@ -98,7 +100,7 @@ class GitDataExtractor:
             if len(path_parts) < 3: raise ValueError("Invalid sr.ht URL")
             self.repo_owner = path_parts[0].replace('~', '') # Strip tilde
             self.repo_name = path_parts[1]
-            self.issue_number = int(path_parts[2])
+            self.data_identifier = int(path_parts[2])
             # sr.ht URLs usually don't have /issues/ or /pulls/ in the path for standard tickets,
             # they are often just under the repo or a specific tracker. 
             # We will treat everything as an 'issue' unless we detect 'pullrequest' explicitly, 
@@ -203,7 +205,7 @@ class GitDataExtractor:
         """
         
         headers = {"Authorization": f"Bearer {self.token}"}
-        vars = {'owner': self.repo_owner, 'repo': self.repo_name, 'number': self.issue_number}
+        vars = {'owner': self.repo_owner, 'repo': self.repo_name, 'number': self.data_identifier}
         
         resp = requests.post('https://api.github.com/graphql', json={'query': query, 'variables': vars}, headers=headers)
         if resp.status_code != 200: raise Exception(f"GitHub API Error: {resp.text}")
@@ -221,7 +223,7 @@ class GitDataExtractor:
         headers = {"PRIVATE-TOKEN": self.token}
         project_enc = requests.utils.quote(f"{self.repo_owner}/{self.repo_name}", safe='')
         endpoint = "merge_requests" if self.is_pr else "issues"
-        api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/{endpoint}/{self.issue_number}"
+        api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/{endpoint}/{self.data_identifier}"
         resp = requests.get(api_url, headers=headers)
         if resp.status_code != 200: raise Exception(f"GitLab API Error: {resp.text}")
         data_raw = resp.json()
@@ -249,7 +251,7 @@ class GitDataExtractor:
             headers = {"Authorization": f"Bearer {self.token}"}
         
         endpoint = "pullrequests" if self.is_pr else "issues"
-        api_url = f"https://api.bitbucket.org/2.0/repositories/{self.repo_owner}/{self.repo_name}/{endpoint}/{self.issue_number}"
+        api_url = f"https://api.bitbucket.org/2.0/repositories/{self.repo_owner}/{self.repo_name}/{endpoint}/{self.data_identifier}"
         
         req_kwargs = {'url': api_url}
         if auth: req_kwargs['auth'] = auth
@@ -273,7 +275,7 @@ class GitDataExtractor:
         headers = {"Authorization": f"token {self.token}"}
         
         endpoint = "pulls" if self.is_pr else "issues"
-        api_url = f"https://{self.domain}/api/v1/repos/{self.repo_owner}/{self.repo_name}/{endpoint}/{self.issue_number}"
+        api_url = f"https://{self.domain}/api/v1/repos/{self.repo_owner}/{self.repo_name}/{endpoint}/{self.data_identifier}"
         
         resp = requests.get(api_url, headers=headers)
         if resp.status_code != 200: raise Exception(f"Codeberg API Error: {resp.text}")
@@ -316,7 +318,7 @@ class GitDataExtractor:
         """
         
         headers = {"Authorization": f"Bearer {self.token}"}
-        vars = {'username': self.repo_owner, 'trackerName': self.repo_name, 'ticketId': self.issue_number}
+        vars = {'username': self.repo_owner, 'trackerName': self.repo_name, 'ticketId': self.data_identifier}
         
         resp = requests.post('https://git.sr.ht/query', json={'query': query, 'variables': vars}, headers=headers)
         if resp.status_code != 200: raise Exception(f"sr.ht API Error: {resp.text}")
@@ -345,7 +347,7 @@ class GitDataExtractor:
         type_str = 'pr' if self.is_pr else 'issue'
         
         # Construct path
-        return os.path.join('git_data_cache', self.domain, clean_owner, self.repo_name, type_str, str(self.issue_number))
+        return os.path.join('git_data_cache', self.domain, clean_owner, self.repo_name, type_str, str(self.data_identifier))
 
     def _save_to_cache(self, path, issue_data, activity_data):
         """Saves raw dicts/lists to JSON in the cache directory."""
@@ -379,7 +381,7 @@ class GitDataExtractor:
         try:
             if self.engine == 'github':
                 # GitHub REST API: GET /repos/{owner}/{repo}/pulls/{pull_number}/commits
-                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/pulls/{self.issue_number}/commits"
+                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/pulls/{self.data_identifier}/commits"
                 headers = {"Authorization": f"Bearer {self.token}"}
                 response = requests.get(api_url, headers=headers)
                 if response.status_code == 200:
@@ -393,7 +395,7 @@ class GitDataExtractor:
             elif self.engine == 'gitlab':
                 # GitLab REST API: GET /projects/{id}/merge_requests/{iid}/commits
                 project_enc = requests.utils.quote(f"{self.repo_owner}/{self.repo_name}", safe='')
-                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/merge_requests/{self.issue_number}/commits"
+                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/merge_requests/{self.data_identifier}/commits"
                 headers = {"PRIVATE-TOKEN": self.token}
                 response = requests.get(api_url, headers=headers)
                 if response.status_code == 200:
@@ -411,7 +413,7 @@ class GitDataExtractor:
             print(f"Error getting commits from PR {self.url}: {e}")
             return []
 
-    def get_commit_by_hash(self, commit_hash):
+    def extract_commit(self):
         """
         Get commit details for a specific commit hash in the current repo.
         
@@ -420,12 +422,12 @@ class GitDataExtractor:
             
         Returns:
             dict: Commit details with keys: hash, message, url, author, date, etc.
-                  Returns None if not found or error.
+                    Returns None if not found or error.
         """
         try:
             if self.engine == 'github':
                 # GitHub REST API: GET /repos/{owner}/{repo}/commits/{sha}
-                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/commits/{commit_hash}"
+                api_url = f"https://api.github.com/repos/{self.repo_owner}/{self.repo_name}/commits/{self.data_identifier}"
                 headers = {"Authorization": f"token {self.token}"}
                 response = requests.get(api_url, headers=headers)
                 if response.status_code == 200:
@@ -437,14 +439,14 @@ class GitDataExtractor:
                         'author': commit_data['commit']['author']['name'] if commit_data['commit']['author'] else None,
                         'date': commit_data['commit']['author']['date'] if commit_data['commit']['author'] else None
                     }
-                elif response.status_code == 404:
-                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                elif response.status_code in [404, 422]:
+                    print(f"Commit {self.data_identifier} not found in {self.repo_owner}/{self.repo_name}")
                     return None
             
             elif self.engine == 'gitlab':
                 # GitLab REST API: GET /projects/{id}/repository/commits/{sha}
                 project_enc = requests.utils.quote(f"{self.repo_owner}/{self.repo_name}", safe='')
-                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/repository/commits/{commit_hash}"
+                api_url = f"https://{self.domain}/api/v4/projects/{project_enc}/repository/commits/{self.data_identifier}"
                 headers = {"PRIVATE-TOKEN": self.token}
                 response = requests.get(api_url, headers=headers)
                 if response.status_code == 200:
@@ -457,62 +459,11 @@ class GitDataExtractor:
                         'date': commit_data['authored_date']
                     }
                 elif response.status_code == 404:
-                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
+                    print(f"Commit {self.data_identifier} not found in {self.repo_owner}/{self.repo_name}")
                     return None
-            
-            elif self.engine == 'bitbucket':
-                # Bitbucket REST API: GET /repositories/{owner}/{repo}/commit/{sha}
-                api_url = f"https://api.bitbucket.org/2.0/repositories/{self.repo_owner}/{self.repo_name}/commit/{commit_hash}"
-                
-                # Bitbucket auth can be token or user:pass
-                auth = None
-                headers = {}
-                if ":" in self.token:
-                    user, pw = self.token.split(":", 1)
-                    auth = (user, pw)
-                else:
-                    headers = {"Authorization": f"Bearer {self.token}"}
-                
-                req_kwargs = {'url': api_url}
-                if auth: 
-                    req_kwargs['auth'] = auth
-                else: 
-                    req_kwargs['headers'] = headers
-                
-                response = requests.get(**req_kwargs)
-                if response.status_code == 200:
-                    commit_data = response.json()
-                    return {
-                        'hash': commit_data['hash'],
-                        'message': commit_data['message'],
-                        'url': f"https://bitbucket.org/{self.repo_owner}/{self.repo_name}/commits/{commit_hash}",
-                        'author': commit_data['author']['raw'] if 'author' in commit_data else None,
-                        'date': commit_data['date'] if 'date' in commit_data else None
-                    }
-                elif response.status_code == 404:
-                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
-                    return None
-            
-            elif self.engine == 'forgejo':  # Codeberg/Forgejo/Gitea
-                # Forgejo REST API: GET /repos/{owner}/{repo}/git/commits/{sha}
-                api_url = f"https://{self.domain}/api/v1/repos/{self.repo_owner}/{self.repo_name}/git/commits/{commit_hash}"
-                headers = {"Authorization": f"token {self.token}"}
-                response = requests.get(api_url, headers=headers)
-                if response.status_code == 200:
-                    commit_data = response.json()
-                    return {
-                        'hash': commit_data['sha'],
-                        'message': commit_data['commit']['message'],
-                        'url': f"https://{self.domain}/{self.repo_owner}/{self.repo_name}/commit/{commit_hash}",
-                        'author': commit_data['commit']['author']['name'] if commit_data['commit']['author'] else None,
-                        'date': commit_data['commit']['author']['date'] if commit_data['commit']['author'] else None
-                    }
-                elif response.status_code == 404:
-                    print(f"Commit {commit_hash} not found in {self.repo_owner}/{self.repo_name}")
-                    return None
-            
-            # For other platforms (sourcehut, etc.) or unsupported
-            print(f"Getting commit details not supported for {self.engine}")
+            else:
+                # For other platforms (sourcehut, etc.) or unsupported
+                print(f"Getting commit details not supported for {self.engine}")
             return None
             
         except Exception as e:
