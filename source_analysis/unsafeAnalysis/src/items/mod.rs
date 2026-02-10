@@ -1,9 +1,9 @@
 use rustc_lint::LateContext;
 use rustc_hir::intravisit::{Visitor, FnKind};
-use rustc_hir::{FnDecl, BodyId, HirId};
+use rustc_hir::{FnDecl, BodyId};
 use rustc_hir::def_id::DefId;
+use rustc_hir::def_id::LocalDefId;
 use rustc_middle::ty::TyCtxt;
-use rustc_middle::hir::map::Map;
 use rustc_span::Span;
 
 use decls::items::UnsafeItemInfo;
@@ -19,7 +19,7 @@ pub enum UnsafeItem{
 
 pub fn run_analysis(cx: & LateContext<'_>) -> ItemsAnalysis {
     let mut visitor = ItemVisitor::new(cx.tcx);
-    cx.tcx.hir().walk_toplevel_module(&mut visitor);
+    cx.tcx.hir_walk_toplevel_module(&mut visitor);
     let mut unsafe_fn: Vec<UnsafeItemInfo> = Vec::new();
     for item in visitor.unsafe_fn {
         let node_name: String = get_node_name(cx.tcx, item.id);
@@ -109,17 +109,17 @@ impl<'tcx> ItemVisitor<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for ItemVisitor<'tcx> {
-    type Map = Map<'tcx>;
+    type Result = ();
     type NestedFilter = rustc_middle::hir::nested_filter::All;
-    fn nested_visit_map<'this>(&'this mut self) -> Self::Map {
-        self.tcx.hir()
+
+    fn maybe_tcx(&mut self) -> Self::MaybeTyCtxt {
+        self.tcx
     }
 
-    fn visit_block(&mut self, b: &'tcx rustc_hir::Block) {
+    fn visit_block(&mut self, b: &'tcx rustc_hir::Block<'tcx>) {
         match b.rules {
-            rustc_hir::BlockCheckMode::DefaultBlock => { self.safe_block_num += 1}
+            rustc_hir::BlockCheckMode::DefaultBlock => self.safe_block_num += 1,
             rustc_hir::BlockCheckMode::UnsafeBlock(_) => {
-                // get the unsafe block's owner name, and add to the unsafe block vectors
                 self.add(MyUnsafeBlock, b.hir_id.owner.to_def_id(), b.span, false);
                 self.unsafe_block_num += 1;
             }
@@ -127,35 +127,57 @@ impl<'tcx> Visitor<'tcx> for ItemVisitor<'tcx> {
         rustc_hir::intravisit::walk_block(self, b);
     }
 
-    fn visit_item(&mut self, item: &'tcx rustc_hir::Item) {
-        // add unsafe trait implement to its vector
-        if let rustc_hir::ItemKind::Impl(trait_impl) = &item.kind {
-            if let rustc_hir::Unsafety::Unsafe = trait_impl.unsafety{
-                self.add(MyUnsafeTraitImpl, item.def_id.to_def_id(), item.span, false);
+    fn visit_item(&mut self, item: &'tcx rustc_hir::Item<'tcx>) {
+        match &item.kind {
+            // Handle unsafe trait impl
+            rustc_hir::ItemKind::Impl(impl_item) => {
+                if let Some(trait_impl_header) = impl_item.of_trait {
+                    if trait_impl_header.safety.is_unsafe() {
+                        self.add(
+                            MyUnsafeTraitImpl,
+                            item.owner_id.to_def_id(),
+                            item.span,
+                            false,
+                        );
+                    }
+                }
             }
-        } else {
-            // add unsafe trait to its vector
-            if let rustc_hir::ItemKind::Trait(_, rustc_hir::Unsafety::Unsafe, ..) = item.kind {
-                self.add(MyUnsafeTrait, item.def_id.to_def_id(), item.span, false);
+            // Handle unsafe trait definition
+            rustc_hir::ItemKind::Trait(_, _, safety, _, _, _, _) => {
+                if safety.is_unsafe() {
+                    self.add(
+                        MyUnsafeTrait,
+                        item.owner_id.to_def_id(),
+                        item.span,
+                        false,
+                    );
+                }
             }
+            _ => {}
         }
+        
         rustc_hir::intravisit::walk_item(self, item);
     }
-    fn visit_fn(&mut self, fk: FnKind<'tcx>, fd: &'tcx FnDecl<'tcx>, b: BodyId, s: Span, id: HirId){
+
+    fn visit_fn(&mut self, fk: FnKind<'tcx>, fd: &'tcx FnDecl<'tcx>, b: BodyId, s: Span, id: LocalDefId){
         let mut safety: bool = true;
-        if let FnKind::ItemFn(_, _, fn_header, ..) = fk{
-            if let rustc_hir::Unsafety::Unsafe = fn_header.unsafety{
-                safety = false;
-            }
-        }
-        else{
-            if let FnKind::Method(_, ref fn_sig, ..) = fk{
-                if let rustc_hir::Unsafety::Unsafe = fn_sig.header.unsafety{
+        match fk {
+            FnKind::ItemFn(_ident, _generics, header) => {
+                if header.is_unsafe() {
                     safety = false;
                 }
             }
+            FnKind::Method(_ident, sig) => {
+                if sig.header.is_unsafe() {
+                    safety = false;
+                }
+            }
+            FnKind::Closure => {
+                // Do nothing
+            }
         }
-        self.add(MyUnsafeFn, self.tcx.hir().local_def_id(id).to_def_id(), s, safety);
+        // self.add(MyUnsafeFn, self.tcx.hir().local_def_id(id).to_def_id(), s, safety);
+        self.add(MyUnsafeFn, id.to_def_id(), s, safety);
         rustc_hir::intravisit::walk_fn(self, fk, fd, b, id);
     }
 }

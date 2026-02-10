@@ -3,20 +3,22 @@
 // modified, or distributed except according to those terms.
 
 #![feature(rustc_private)]
-#![feature(box_syntax)]
 #![feature(box_patterns)]
+#![feature(exitcode_exit_method)]
 
 
 extern crate rustc_driver;
 extern crate rustc_interface;
+extern crate rustc_session;
+extern crate rustc_middle;
+extern crate rustc_errors;
 
 // use corpus_extractor::{analyse, override_queries, save_cfg_configuration};
 use rustc_driver::Compilation;
 use rustc_interface::{
-    interface::{Compiler, Config},
-    Queries,
+    interface::{Compiler, Config}
 };
-use std::process;
+use rustc_session::EarlyDiagCtxt;
 use unsafe_analysis::Functions;
 struct CorpusCallbacks {}
 
@@ -34,7 +36,7 @@ impl rustc_driver::Callbacks for CorpusCallbacks {
     fn after_analysis<'tcx>(
         &mut self,
         _compiler: &Compiler,
-        _queries: &'tcx Queries<'tcx>,
+        _queries: rustc_middle::ty::TyCtxt<'tcx>
     ) -> Compilation {
         // analyse(compiler, queries);
         Compilation::Continue
@@ -42,7 +44,16 @@ impl rustc_driver::Callbacks for CorpusCallbacks {
 }
 
 fn main() {
-    rustc_driver::init_rustc_env_logger();
+    let early_diag_ctxt = EarlyDiagCtxt::new(
+        rustc_session::config::ErrorOutputType::HumanReadable {
+            kind: rustc_errors::emitter::HumanReadableErrorType {
+                short: false,
+                unicode: true,
+            },
+            color_config: rustc_errors::ColorConfig::Auto,
+        }
+    );
+    rustc_driver::init_rustc_env_logger(&early_diag_ctxt);
     let mut callbacks = CorpusCallbacks {};
     let exit_code = rustc_driver::catch_with_exit_code(|| {
         use std::env;
@@ -73,7 +84,7 @@ fn main() {
             .iter()
             .map(ToString::to_string),
         );
-        rustc_driver::RunCompiler::new(&args, &mut callbacks).run()
+        rustc_driver::run_compiler(&args, &mut callbacks);
     });
-    process::exit(exit_code);
+    exit_code.exit_process();
 }

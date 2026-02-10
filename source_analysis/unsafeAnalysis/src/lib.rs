@@ -58,27 +58,24 @@ impl Functions {
         }
     }
 
-    fn add<'tcx>(&mut self, tcx: TyCtxt<'tcx>, node_id: HirId, unsafety: rustc_hir::Unsafety) {
+    fn add<'tcx>(&mut self, tcx: TyCtxt<'tcx>, node_id: HirId, unsafety: rustc_hir::Safety) {
         let decl_unsafety: bool;
-        match unsafety {
-            rustc_hir::Unsafety::Normal => {
-                decl_unsafety = false;
-                self.safe_fn_num += 1;
-            }
-            rustc_hir::Unsafety::Unsafe => {
-                decl_unsafety = true;
-                self.unsafe_fn_num += 1;
-            }
+        if unsafety.is_safe() {
+            decl_unsafety = false;
+            self.safe_fn_num += 1;
+        } else {
+            decl_unsafety = true;
+            self.unsafe_fn_num += 1;
         }
-        let span = tcx.hir().span(node_id);
-        let fn_node = tcx.hir().get(node_id);
+        let span = tcx.hir_span(node_id);
+        let fn_node = tcx.hir_node(node_id);
         if let Some(body_id) = fn_node.body_id(){
-            let body_span = tcx.hir().span(body_id.hir_id);
-                self.all_fn_infos.push(FnInfo::new(utils::get_node_name(tcx, tcx.hir().local_def_id(node_id).to_def_id()),
-                                                tcx.hir().node_to_string(node_id),
-                                                utils::get_line(&tcx, span),
-                                                utils::get_line(&tcx, body_span),
-                                                decl_unsafety));
+            let body_span = tcx.hir_span_with_body(body_id.hir_id);
+            self.all_fn_infos.push(FnInfo::new(utils::get_node_name(tcx, node_id.owner.to_def_id()),
+                                            tcx.hir_id_to_string(node_id),
+                                            utils::get_line(&tcx, span),
+                                            utils::get_line(&tcx, body_span),
+                                            decl_unsafety));
         }
             
         self.all_fn_ids.push(node_id);
@@ -89,23 +86,24 @@ impl<'tcx> LateLintPass<'tcx> for Functions {
     fn check_crate(&mut self, _: &LateContext<'tcx>) {
     }
     //========= for function safety analysis ==================
-    fn check_body(&mut self, cx: &LateContext<'tcx>, body: &'tcx rustc_hir::Body) {
+    fn check_body(&mut self, cx: &LateContext<'tcx>, body: &rustc_hir::Body<'tcx>) {
         //need to find fn/method declaration of this body
-        let owner_def_id = cx.tcx.hir().body_owner_def_id(body.id());
+        let owner_def_id = cx.tcx.hir_body_owner_def_id(body.id());
         if owner_def_id.to_def_id().is_local() {
-            let owner_hir_id = cx.tcx.hir().local_def_id_to_hir_id(owner_def_id);
-            let node = cx.tcx.hir().get(owner_hir_id);
+            let owner_hir_id = cx.tcx.local_def_id_to_hir_id(owner_def_id);
+            let node = cx.tcx.hir_node(owner_hir_id);
             match node {
                 rustc_hir::Node::Item(item) => {
                     // functions
-                    if let rustc_hir::ItemKind::Fn(ref fn_sig, ref _fn_generic, _) = item.kind {
-                        self.add(cx.tcx, owner_hir_id, fn_sig.header.unsafety);
+                    if let rustc_hir::ItemKind::Fn { sig: ref fn_sig, .. } = item.kind {
+                        self.add(cx.tcx, owner_hir_id, fn_sig.header.safety());
                     }
+
                 },
                 rustc_hir::Node::ImplItem(ref impl_item) => {
                     // method implementations
                     if let rustc_hir::ImplItemKind::Fn(ref sig, _) = impl_item.kind {
-                        self.add(cx.tcx, owner_hir_id, sig.header.unsafety);
+                        self.add(cx.tcx, owner_hir_id, sig.header.safety());
                     }
                 }
                 rustc_hir::Node::Expr(ref _expr) => {}//closure nothing to do
@@ -120,7 +118,7 @@ impl<'tcx> LateLintPass<'tcx> for Functions {
                         | rustc_hir::TraitItemKind::Type(..) => { }
                         rustc_hir::TraitItemKind::Fn(ref sig, ref _trait_method) => {
                             if trait_item.defaultness.has_value(){
-                                self.add(cx.tcx, owner_hir_id, sig.header.unsafety);
+                                self.add(cx.tcx, owner_hir_id, sig.header.safety());
                             }
                         }
                     }

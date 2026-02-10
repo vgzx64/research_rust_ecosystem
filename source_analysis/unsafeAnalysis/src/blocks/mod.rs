@@ -1,6 +1,5 @@
 use rustc_lint::LateContext;
 use rustc_middle::ty::TyCtxt;
-use rustc_middle::hir::map::Map;
 use rustc_hir::def_id::DefId;
 use rustc_hir::hir_id::HirId;
 
@@ -15,7 +14,7 @@ pub fn run_sources_analysis<'a, 'tcx>(cx: &LateContext<'tcx>
     let mut safe_cnt:i32 = 0;
     // get blocks inside functions
     for &fn_id in fns {
-        let fn_def_id = cx.tcx.hir().local_def_id(fn_id).to_def_id();
+        let fn_def_id = fn_id.owner.to_def_id();
         if let Some(tup) = get_blocks(cx.tcx, fn_id, fn_def_id){
             if tup.2.len() > 0{
                 result.push(tup.2);
@@ -37,12 +36,12 @@ fn get_blocks<'a, 'tcx>(tcx: TyCtxt<'tcx>, fn_hir_id: HirId, fn_id: DefId) -> Op
         unsafe_block_cnt: 0,
         safe_block_cnt: 0
     };
-    if let Some(fn_node) = tcx.hir().get_if_local(fn_id) {
+    if let Some(fn_node) = tcx.hir_get_if_local(fn_id) {
         // Given a HirId, returns the BodyId associated with it, if the node is a body owner, otherwise returns None.
         let body_id_opt = fn_node.body_id();
         match body_id_opt {
             Some(body_id) => {
-                let body = tcx.hir().body(body_id);
+                let body = tcx.hir_body(body_id);
                 rustc_hir::intravisit::walk_body(&mut body_visitor, body);
                 Some((body_visitor.unsafe_block_cnt, body_visitor.safe_block_cnt,body_visitor.blocks))
             }
@@ -66,19 +65,13 @@ impl<'tcx> UnsafeBlocksVisitorData<'tcx>{
     pub fn add_block(&mut self, b: &'tcx rustc_hir::Block,  unsafety: bool){
         // println!("Block span: {}", get_line(&self.tcx, b.span));  
         // println!("Block safety: {}", unsafety); 
-        self.blocks.push(BlockUnsafety::new(self.tcx.hir().node_to_string(self.fn_hir_id),
+        self.blocks.push(BlockUnsafety::new(self.tcx.hir_id_to_string(self.fn_hir_id),
                                             get_line(&self.tcx, b.span), 
                                             unsafety));
     }
 }
 
 impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for UnsafeBlocksVisitorData<'tcx> {
-    type Map = Map<'tcx>;
-    type NestedFilter = rustc_middle::hir::nested_filter::All;
-    fn nested_visit_map<'this>(&'this mut self) -> Self::Map {
-        self.tcx.hir()
-    }
-
     fn visit_block(&mut self, b: &'tcx rustc_hir::Block) {
         match b.rules {
             rustc_hir::BlockCheckMode::DefaultBlock => {
