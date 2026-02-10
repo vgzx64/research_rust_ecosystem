@@ -18,9 +18,9 @@ from utils import get_full_project_name, is_git_repo
 dest = "../../repos_mirror"
 dest_work= "../../repos_worktree"
 compiler_result = "../../compiler_result_v2"
-compile_script = "compile_single.sh"
-check_head = "check_head.sh"
-worktree = "worktree.sh"
+compile_script = "./compile_single.sh"
+check_head = "./check_head.sh"
+worktree = "./worktree.sh"
 
 
 def get_worktree(repo_dest_path, work_tree_path):
@@ -45,8 +45,10 @@ def main(datafile):
 
     for index, row in df_fixes.iterrows():
         repo_url = row["repo_url"]
-        cve_id = row["cve_id"]
+        cve_ids = eval(row["cve_id"])
         hash = row["hash"]
+
+        cve_id = cve_ids[0]
         # if repo_url != "https://github.com/paritytech/frontier":
         #     continue
         # outpath = compiler_result+package+"/"+cve_id
@@ -74,7 +76,8 @@ def main(datafile):
                     analysis_dir = f"{compiler_result}/{full_project_name}/{cve_id}/{hash}"
                     if not os.path.exists(analysis_dir):
                         print("git check ", commit.parents[0])
-                        os.system(check_head+" "+work_tree_path+" "+commit.parents[0]+" "+features)
+                        cmd_gc = check_head+" "+work_tree_path+" "+commit.parents[0]+" "+features
+                        os.system(cmd_gc)
                         # run the compiler script
                         if os.system(compile_script+" "+work_tree_path+" "+cve_id+" "+commit.parents[0]+" "+analysis_dir)==0:
                             success_cnt += 1

@@ -11,7 +11,9 @@ if [ ! -d $FULL_ANALYSIS_DIR ]; then
 fi
 
 cd $1
-RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo +nightly build --ignore-rust-version
+# Do not install other toolchains
+rm -f rust-toolchain.toml
+RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo +nightly build
 # check if build success or not
 if [ $? -ne 0 ]; then
     failed=1
