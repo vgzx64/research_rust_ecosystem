@@ -72,6 +72,11 @@ impl<'tcx> UnsafeBlocksVisitorData<'tcx>{
 }
 
 impl<'tcx> rustc_hir::intravisit::Visitor<'tcx> for UnsafeBlocksVisitorData<'tcx> {
+    type NestedFilter = rustc_middle::hir::nested_filter::All;
+    fn maybe_tcx(&mut self) -> Self::MaybeTyCtxt {
+        self.tcx
+    }
+
     fn visit_block(&mut self, b: &'tcx rustc_hir::Block) {
         match b.rules {
             rustc_hir::BlockCheckMode::DefaultBlock => {

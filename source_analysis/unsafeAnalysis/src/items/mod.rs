@@ -109,7 +109,6 @@ impl<'tcx> ItemVisitor<'tcx> {
 }
 
 impl<'tcx> Visitor<'tcx> for ItemVisitor<'tcx> {
-    type Result = ();
     type NestedFilter = rustc_middle::hir::nested_filter::All;
 
     fn maybe_tcx(&mut self) -> Self::MaybeTyCtxt {

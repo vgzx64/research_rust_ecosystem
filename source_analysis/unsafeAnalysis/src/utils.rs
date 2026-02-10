@@ -49,7 +49,7 @@ pub fn get_node_name<'a, 'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> String {
 // }
 
 pub fn get_line<'a, 'tcx>(tcx: &TyCtxt<'tcx>, span: rustc_span::Span) -> String {
-    let span_string = tcx.sess.source_map().span_to_string(span, RemapPathScopeComponents::OBJECT);
+    let span_string = tcx.sess.source_map().span_to_string(span, RemapPathScopeComponents::DEBUGINFO);
     span_string
 }
 
@@ -57,7 +57,7 @@ pub fn get_file_and_line<'a, 'tcx>(tcx: &TyCtxt<'tcx>, span: rustc_span::Span) -
     let mut result = String::new();
     // Looks up source information about a BytePos.
     let loc = tcx.sess.source_map().lookup_char_pos(span.lo());
-    let span_string = tcx.sess.source_map().span_to_string(span, RemapPathScopeComponents::OBJECT);
+    let span_string = tcx.sess.source_map().span_to_string(span, RemapPathScopeComponents::DEBUGINFO);
     let filename = &loc.file.name;
     if let Err(e) = write!(result, "file: {:?} line {:?}", filename, span_string){
         println!("Writing error: {}", e.to_string());  

@@ -123,8 +123,12 @@ impl<'tcx> LateLintPass<'tcx> for Functions {
                         }
                     }
                 }
+                rustc_hir::Node::ConstBlock(ref const_block) => {
+                    // Ignore them because they are executed at compile-time
+                    // TODO: check whether they have unsafe code
+                }
                 _ => {
-                    panic!("Not handled {:?} ", node);
+                    println!("Not handled {:?} ", node);
                 }
             }
         }
