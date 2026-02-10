@@ -4,3 +4,4 @@ repos_mirror
 test/
 *.csv
 __pycache__/
+compiler_result*/

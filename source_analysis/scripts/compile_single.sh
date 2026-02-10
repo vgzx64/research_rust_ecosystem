@@ -1,7 +1,7 @@
 # export CVE_ID=""
 # export HASH=""
 export FULL_ANALYSIS_DIR=$4
-export RUSTC="/home/xiaoyez/rust_vulnerabilities/source_analysis/unsafeAnalysis/target/release/rustc"
+export RUSTC="/home/dev/Code/rust_ecosystem/source_analysis/unsafeAnalysis/target/release/rustc"
 export SYSROOT="$(rustc --print sysroot)"
 export LD_LIBRARY_PATH="$SYSROOT/lib"
 export RUSTFLAGS="--cap-lints warn"
@@ -11,7 +11,7 @@ if [ ! -d $FULL_ANALYSIS_DIR ]; then
 fi
 
 cd $1
-RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo build
+RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo +nightly build --ignore-rust-version
 # check if build success or not
 if [ $? -ne 0 ]; then
     failed=1
