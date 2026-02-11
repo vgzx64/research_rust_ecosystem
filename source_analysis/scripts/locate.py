@@ -2,7 +2,7 @@ import sys
 import pandas as pd
 import re
 import click
-sys.path.append('/home/xiaoyez/rust_vulnerabilities/utils')
+sys.path.append('../../utils')
 import database as db
 from database import write_database
 
@@ -62,7 +62,7 @@ def locate_modified_lines(file_path, modified_lines, df_func, df_unsafe_block):
 
 
 @click.command()
-@click.argument("commitfile", type=click.STRING) # /home/xiaoyez/rust_vulnerabilities/data_collection/data/fix_commits_final.csv
+@click.argument("commitfile", type=click.STRING)
 def main(commitfile):
     mycursor = db.conn.cursor()
     mycursor.execute("DROP TABLE IF EXISTS vul_safe_unsafe;")
@@ -81,13 +81,18 @@ def main(commitfile):
     no_modified_file = 0
     compile_failure_before = 0
     compile_failure_after = 0
-    df_error = pd.DataFrame()
+    df_error = pd.DataFrame(columns=['cve_id', 'hash'])
 
-    for index, row in df.iterrows():
-        cve_id = row['cve_id']
+    for _, row in df.iterrows():
+        # Note: some datasets refer to a list of CVEs as 'cve_id',
+        # and some use just cve_id with ONLY first cve_id
+        cve_ids_str = row['cve_id']
         commit_hash = row['hash']
         repo_url = row["repo_url"]
         print(repo_url)
+
+        cve_ids = eval(cve_ids_str)
+        cve_id = cve_ids[0]
         # try:  
         # get file diff, meta information about VEC and VFC
         df_file = pd.read_sql("SELECT old_path, new_path, diff_parsed FROM file_change WHERE hash=\""+commit_hash+"\"", con=db.conn)
@@ -107,9 +112,10 @@ def main(commitfile):
             no_modified_file +=1
             # print(commit_hash)
             # print(repo_url)
-            df_error = df_error.append({"cve_id":cve_id,
-            "hash": repo_url+"/commit/"+commit_hash
-            }, ignore_index=True)
+            df_error.loc[len(df_error)] = {
+                "cve_id": cve_ids_str,
+                "hash": repo_url+"/commit/"+commit_hash
+            }
             continue
         
         if df_func.empty:
@@ -119,9 +125,10 @@ def main(commitfile):
             compile_failure_after += 1
             
         if df_func.empty and df_func_fix.empty:
-            df_error = df_error.append({"cve_id":cve_id,
-            "hash": repo_url+"/commit/"+commit_hash
-            }, ignore_index=True)
+            df_error.loc[len(df_error)] = {
+                "cve_id": cve_ids_str,
+                "hash": repo_url+"/commit/"+commit_hash
+            }
             continue
         vul_unsafe_func = 0
         vul_safe_func = 0
@@ -133,7 +140,7 @@ def main(commitfile):
         unsafe_func_names = list()
         
         # iterate modified lines in files
-        for index2, row_file in df_file.iterrows():
+        for _, row_file in df_file.iterrows():
             if re.compile(r".*\.rs").match(row_file["old_path"]):
                 # code version before fix commit 
                 file_path = row_file["old_path"]
@@ -163,22 +170,24 @@ def main(commitfile):
         safe_func_names = len(set(safe_func_names))
         unsafe_func_names = len(set(unsafe_func_names))
         if vul_unsafe_func==0 and vul_safe_func==0 and vul_unsafe_block==0 and fix_unsafe_func==0 and fix_unsafe_block==0 and fix_unsafe_block==0:
-            df_error = df_error.append({"cve_id":cve_id,
-            "hash": repo_url+"/commit/"+commit_hash
-            }, ignore_index=True)
+            df_error.loc[len(df_error)] = {
+                "cve_id": cve_ids_str,
+                "hash": repo_url+"/commit/"+commit_hash
+            }
         else:
-            df_result = df_result.append({"cve_id":cve_id,
-                    "hash": commit_hash, 
-                    "unsafe_func": vul_unsafe_func, 
-                    "safe_func": vul_safe_func ,
-                    "unsafe_block": vul_unsafe_block, 
-                    "unsafe_func_fix": fix_unsafe_func, 
-                    "safe_func_fix": fix_safe_func,
-                    "unsafe_block_fix": fix_unsafe_block,
-                    "total_unsafe_func": unsafe_func_names,
-                    "total_safe_func": safe_func_names,
-                    "total_unsafe_block": max(vul_unsafe_block, fix_unsafe_block)
-                    }, ignore_index=True)
+            df_result.loc[len(df_result)] = {
+                "cve_id":cve_ids_str,
+                "hash": commit_hash, 
+                "unsafe_func": vul_unsafe_func, 
+                "safe_func": vul_safe_func ,
+                "unsafe_block": vul_unsafe_block, 
+                "unsafe_func_fix": fix_unsafe_func, 
+                "safe_func_fix": fix_safe_func,
+                "unsafe_block_fix": fix_unsafe_block,
+                "total_unsafe_func": unsafe_func_names,
+                "total_safe_func": safe_func_names,
+                "total_unsafe_block": max(vul_unsafe_block, fix_unsafe_block)
+            }
         # except Exception as e:
         #     logging.warning(e)
         #     logging.warning(f'Could not retrieve commit information\n')
