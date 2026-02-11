@@ -11,7 +11,9 @@ life spans, and evolution of disclosed vulnerabilities, as well as the affected 
 - Requirements:
 
 ```
-Python 3.9+
+Python 3.13
+pandas 2.3.3
+other packages listed in requirements.txt
 ```
 
 - Run the following commands:
@@ -40,4 +42,5 @@ Please download the db file with our dataset from https://drive.google.com/file/
 3. **Source code Analysis** (`source_analysis/`)
    - `compile.py`: Get the location of unsafe/safe functions and blocks in vulnerable packages by using Rust compiler plugin.
    -  `format_result.py`: Format compilation results into database.
+   - `regex.py`: Parse total safe/unsafe count
 The dataset could be downloaded from https://zenodo.org/record/7828059#.ZDo1v-xBy3Y. 
