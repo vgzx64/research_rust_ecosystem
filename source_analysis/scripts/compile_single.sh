@@ -13,7 +13,8 @@ fi
 cd $1
 # Do not install other toolchains
 rm -f rust-toolchain.toml
-RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo +nightly build
+rm -f rust-toolchain
+RUSTFLAGS="$RUSTFLAGS -A dead_code -A warnings -A unused_must_use" cargo +nightly check
 # check if build success or not
 if [ $? -ne 0 ]; then
     failed=1
