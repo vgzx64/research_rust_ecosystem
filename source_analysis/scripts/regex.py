@@ -98,12 +98,14 @@ def main(datafile):
     df_fixes = pd.read_csv(datafile)
     df_fixes.drop_duplicates(subset =['hash', 'repo_url'], keep = 'first', inplace = True)
     cnt = 0
-    df = pd.DataFrame()
+    df = pd.DataFrame(columns=["cve_id", "hash", "safe_func", "unsafe_func", "unsafe_block"])
     print(df_fixes)
     for index, row in df_fixes.iterrows():
         repo_url = row["repo_url"]
-        cve_id = row["cve_id"]
+        cve_ids = eval(row["cve_id"])
         hash = row["hash"]
+
+        cve_id = cve_ids[0]
         
         full_project_name = get_full_project_name(repo_url)
         repo_dest_path = os.path.join(dest, full_project_name)
@@ -124,11 +126,13 @@ def main(datafile):
                         os.system(check_head+" "+work_tree_path+" "+commit.parents[0])
                         # run the regex
                         total_safe_fn, total_unsafe_fn, total_unsafe_block = regex_crate(work_tree_path, "./temp", cve_id, hash)
-                        df = df.append({"cve_id": cve_id, 
+                        df.loc[len(df)] = {
+                            "cve_id": cve_id, 
                             "hash":hash, 
                             "safe_func":total_safe_fn, 
                             "unsafe_func":total_unsafe_fn, 
-                            "unsafe_block":total_unsafe_block}, ignore_index=True)
+                            "unsafe_block":total_unsafe_block
+                        }
                         cnt += 1
                     
                 except Exception as e:
