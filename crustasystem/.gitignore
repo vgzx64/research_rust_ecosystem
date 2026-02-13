@@ -1,0 +1,32 @@
+# Build artifacts
+/target
+**/target
+
+# Cargo lock file (optional - uncomment if you want to commit it)
+# Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# Temp files
+*.tmp
+*.temp

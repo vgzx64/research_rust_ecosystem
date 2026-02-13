@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crustasystem - Vulnerability Database</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            min-height: 100vh;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        
+        /* Header */
+        header {
+            background: #161b22;
+            border-bottom: 1px solid #30363d;
+            padding: 20px 0;
+            margin-bottom: 30px;
+        }
+        header .container { display: flex; align-items: center; justify-content: space-between; }
+        h1 { color: #58a6ff; font-size: 28px; display: flex; align-items: center; gap: 10px; }
+        .logo { width: 32px; height: 32px; background: linear-gradient(135deg, #f74c00, #ff7a00); border-radius: 6px; }
+        
+        /* Navigation */
+        nav { display: flex; gap: 10px; }
+        nav button {
+            background: transparent;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        nav button:hover, nav button.active { background: #21262d; border-color: #58a6ff; color: #58a6ff; }
+        
+        /* Cards */
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        /* Search */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .search-bar input, .search-bar select {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .search-bar input:focus, .search-bar select:focus {
+            outline: none; border-color: #58a6ff;
+        }
+        .search-bar input { flex: 1; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #30363d; }
+        th { color: #8b949e; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        tr:hover { background: #21262d; }
+        
+        /* Severity badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge.critical { background: #da3633; color: white; }
+        .badge.high { background: #f85149; color: white; }
+        .badge.medium { background: #d29922; color: black; }
+        .badge.low { background: #238636; color: white; }
+        
+        /* Type tags */
+        .tag {
+            display: inline-block;
+            background: #21262d;
+            border: 1px solid #30363d;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin: 2px;
+        }
+        
+        /* Stats */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 20px; text-align: center; }
+        .stat-value { font-size: 36px; font-weight: 700; color: #58a6ff; }
+        .stat-label { color: #8b949e; font-size: 14px; margin-top: 5px; }
+        
+        /* Loading */
+        .loading { text-align: center; padding: 40px; color: #8b949e; }
+        
+        /* Diff view */
+        .diff-view { background: #0d1117; border-radius: 6px; padding: 15px; font-family: monospace; font-size: 13px; overflow-x: auto; }
+        .diff-line { padding: 2px 10px; white-space: pre; }
+        .diff-add { background: rgba(46, 160, 67, 0.2); color: #7ee787; }
+        .diff-del { background: rgba(248, 81, 73, 0.2); color: #ff7b72; }
+        
+        /* Detail view */
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .detail-item { margin-bottom: 15px; }
+        .detail-label { color: #8b949e; font-size: 12px; margin-bottom: 5px; }
+        .detail-value { font-size: 14px; }
+        
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid #30363d; margin-bottom: 20px; }
+        .tab {
+            padding: 10px 20px;
+            background: transparent;
+            border: none;
+            color: #8b949e;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab:hover { color: #c9d1d9; }
+        .tab.active { color: #58a6ff; border-bottom-color: #58a6ff; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="container">
+                <h1><span class="logo"></span> Crustasystem</h1>
+                <nav>
+                    <button :class="{ active: currentView === 'vulnerabilities' }" @click="currentView = 'vulnerabilities'">Vulnerabilities</button>
+                    <button :class="{ active: currentView === 'packages' }" @click="currentView = 'packages'">Packages</button>
+                    <button :class="{ active: currentView === 'statistics' }" @click="currentView = 'statistics'">Statistics</button>
+                </nav>
+            </div>
+        </header>
+        
+        <div class="container">
+            <!-- Vulnerabilities View -->
+            <div v-if="currentView === 'vulnerabilities'">
+                <div class="search-bar">
+                    <input type="text" v-model="searchQuery" placeholder="Search by package name..." @input="searchVulnerabilities">
+                    <select v-model="filterSeverity" @change="searchVulnerabilities">
+                        <option value="">All Severities</option>
+                        <option v-for="sev in severityLevels" :key="sev.id" :value="sev.id">{{ sev.level }}</option>
+                    </select>
+                    <select v-model="filterType" @change="searchVulnerabilities">
+                        <option value="">All Types</option>
+                        <option v-for="type in vulnerabilityTypes" :key="type.id" :value="type.id">{{ type.name }}</option>
+                    </select>
+                </div>
+                
+                <div class="card">
+                    <table v-if="!loading && vulnerabilities.length">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Package</th>
+                                <th>Severity</th>
+                                <th>Type</th>
+                                <th>Published</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="vuln in vulnerabilities" :key="vuln.id" @click="selectVulnerability(vuln)" style="cursor: pointer;">
+                                <td>#{{ vuln.id }}</td>
+                                <td>{{ vuln.package_name }}</td>
+                                <td><span class="badge" :class="getSeverityClass(vuln.severity_id)">{{ getSeverityName(vuln.severity_id) }}</span></td>
+                                <td><span class="tag">{{ getTypeName(vuln.type_id) }}</span></td>
+                                <td>{{ vuln.published_at ? new Date(vuln.published_at).toLocaleDateString() : 'N/A' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="loading" class="loading">Loading...</div>
+                    <div v-if="!loading && !vulnerabilities.length" class="loading">No vulnerabilities found</div>
+                </div>
+                
+                <!-- Vulnerability Detail Modal -->
+                <div v-if="selectedVulnerability" class="card" style="margin-top: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>{{ selectedVulnerability.package_name }}</h2>
+                        <button @click="selectedVulnerability = null" style="background: transparent; border: none; color: #8b949e; cursor: pointer; font-size: 20px;">✕</button>
+                    </div>
+                    
+                    <div class="tabs">
+                        <button class="tab" :class="{ active: detailTab === 'info' }" @click="detailTab = 'info'">Info</button>
+                        <button class="tab" :class="{ active: detailTab === 'commits' }" @click="detailTab = 'commits'">Commits</button>
+                        <button class="tab" :class="{ active: detailTab === 'files' }" @click="detailTab = 'files'">Files</button>
+                        <button class="tab" :class="{ active: detailTab === 'functions' }" @click="detailTab = 'functions'">Functions</button>
+                    </div>
+                    
+                    <div v-if="detailTab === 'info'">
+                        <div class="detail-grid">
+                            <div class="detail-item">
+                                <div class="detail-label">Summary</div>
+                                <div class="detail-value">{{ selectedVulnerability.summary || 'N/A' }}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Details</div>
+                                <div class="detail-value">{{ selectedVulnerability.details || 'N/A' }}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Severity</div>
+                                <div class="detail-value"><span class="badge" :class="getSeverityClass(selectedVulnerability.severity_id)">{{ getSeverityName(selectedVulnerability.severity_id) }}</span></div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Type</div>
+                                <div class="detail-value"><span class="tag">{{ getTypeName(selectedVulnerability.type_id) }}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div v-if="detailTab === 'commits'">
+                        <div v-if="commits.length" v-for="commit in commits" :key="commit.id" class="card" style="background: #0d1117;">
+                            <div style="font-family: monospace; color: #58a6ff;">{{ commit.commit_hash.substring(0, 7) }}</div>
+                            <div style="color: #8b949e; margin-top: 5px;">{{ commit.commit_message }}</div>
+                            <div style="color: #8b949e; font-size: 12px; margin-top: 5px;">Files: {{ commit.num_files_changed }} | +{{ commit.num_additions }} -{{ commit.num_deletions }}</div>
+                        </div>
+                        <div v-else class="loading">No commits found</div>
+                    </div>
+                    
+                    <div v-if="detailTab === 'files'">
+                        <div v-if="fileChanges.length" v-for="file in fileChanges" :key="file.id" class="card" style="background: #0d1117;">
+                            <div style="color: #58a6ff;">{{ file.file_path }}</div>
+                            <div style="color: #8b949e; font-size: 12px;">{{ file.change_type }} | +{{ file.num_additions }} -{{ file.num_deletions }}</div>
+                            <pre v-if="file.diff" class="diff-view" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">{{ file.diff }}</pre>
+                        </div>
+                        <div v-else class="loading">No files found</div>
+                    </div>
+                    
+                    <div v-if="detailTab === 'functions'">
+                        <div v-if="functions.length">
+                            <div class="stats" style="margin-bottom: 20px;">
+                                <div class="stat-card">
+                                    <div class="stat-value">{{ getFunctionCount('vulnerable') }}</div>
+                                    <div class="stat-label">Vulnerable Functions</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">{{ getFunctionCount('fixed') }}</div>
+                                    <div class="stat-label">Fixed Functions</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">{{ getUnsafeCount('vulnerable') }}</div>
+                                    <div class="stat-label">Unsafe (Vulnerable)</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value">{{ getUnsafeCount('fixed') }}</div>
+                                    <div class="stat-label">Unsafe (Fixed)</div>
+                                </div>
+                            </div>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Version</th>
+                                        <th>File</th>
+                                        <th>Function</th>
+                                        <th>Unsafe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="fn in functions" :key="fn.id">
+                                        <td><span class="tag">{{ fn.version }}</span></td>
+                                        <td>{{ fn.file_path }}</td>
+                                        <td>{{ fn.function_name || 'N/A' }}</td>
+                                        <td>{{ fn.is_unsafe ? '⚠️ Yes' : 'No' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-else class="loading">No functions found</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Packages View -->
+            <div v-if="currentView === 'packages'">
+                <div class="search-bar">
+                    <input type="text" v-model="packageSearch" placeholder="Search package name..." @input="searchPackages">
+                </div>
+                
+                <div class="card">
+                    <table v-if="!loading && packages.length">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Downloads</th>
+                                <th>Repository</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="pkg in packages" :key="pkg.id">
+                                <td>{{ pkg.name }}</td>
+                                <td>{{ pkg.downloads ? pkg.downloads.toLocaleString() : 'N/A' }}</td>
+                                <td><a :href="pkg.repository_url" target="_blank" style="color: #58a6ff;">{{ pkg.repository_url ? 'Link' : 'N/A' }}</a></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="loading" class="loading">Loading...</div>
+                </div>
+            </div>
+            
+            <!-- Statistics View -->
+            <div v-if="currentView === 'statistics'">
+                <div class="stats">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ vulnerabilities.length }}</div>
+                        <div class="stat-label">Total Vulnerabilities</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ packages.length }}</div>
+                        <div class="stat-label">Total Packages</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ severityLevels.length }}</div>
+                        <div class="stat-label">Severity Levels</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ vulnerabilityTypes.length }}</div>
+                        <div class="stat-label">Vulnerability Types</div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px;">Vulnerabilities by Severity</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Severity</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="sev in severityLevels" :key="sev.id">
+                                <td><span class="badge" :class="getSeverityClass(sev.id)">{{ sev.level }}</span></td>
+                                <td>{{ getCountBySeverity(sev.id) }}</td>
+                                <td>{{ ((getCountBySeverity(sev.id) / vulnerabilities.length) * 100).toFixed(1) }}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="card" style="margin-top: 20px;">
+                    <h3 style="margin-bottom: 15px;">Vulnerabilities by Type</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Count</th>
+                                <th>Percentage</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="type in vulnerabilityTypes" :key="type.id">
+                                <td>{{ type.name }}</td>
+                                <td>{{ getCountByType(type.id) }}</td>
+                                <td>{{ ((getCountByType(type.id) / vulnerabilities.length) * 100).toFixed(1) }}%</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted } = Vue;
+        
+        const API_BASE = 'http://localhost:8080/api';
+        
+        createApp({
+            setup() {
+                const currentView = ref('vulnerabilities');
+                const loading = ref(false);
+                const vulnerabilities = ref([]);
+                const packages = ref([]);
+                const severityLevels = ref([]);
+                const vulnerabilityTypes = ref([]);
+                
+                const searchQuery = ref('');
+                const filterSeverity = ref('');
+                const filterType = ref('');
+                const packageSearch = ref('');
+                
+                const selectedVulnerability = ref(null);
+                const detailTab = ref('info');
+                const commits = ref([]);
+                const fileChanges = ref([]);
+                const functions = ref([]);
+                
+                // Load initial data
+                onMounted(async () => {
+                    await loadSeverityLevels();
+                    await loadVulnerabilityTypes();
+                    await loadVulnerabilities();
+                });
+                
+                const loadSeverityLevels = async () => {
+                    try {
+                        const res = await axios.get(`${API_BASE}/severity-levels`);
+                        severityLevels.value = res.data;
+                    } catch (e) {
+                        console.error('Failed to load severity levels:', e);
+                    }
+                };
+                
+                const loadVulnerabilityTypes = async () => {
+                    try {
+                        const res = await axios.get(`${API_BASE}/vulnerability-types`);
+                        vulnerabilityTypes.value = res.data;
+                    } catch (e) {
+                        console.error('Failed to load vulnerability types:', e);
+                    }
+                };
+                
+                const loadVulnerabilities = async () => {
+                    loading.value = true;
+                    try {
+                        const params = new URLSearchParams();
+                        if (filterSeverity.value) params.append('severity_id', filterSeverity.value);
+                        if (filterType.value) params.append('type_id', filterType.value);
+                        if (searchQuery.value) params.append('package_name', searchQuery.value);
+                        
+                        const res = await axios.get(`${API_BASE}/vulnerabilities?${params}`);
+                        vulnerabilities.value = res.data;
+                    } catch (e) {
+                        console.error('Failed to load vulnerabilities:', e);
+                    }
+                    loading.value = false;
+                };
+                
+                const searchVulnerabilities = () => {
+                    loadVulnerabilities();
+                };
+                
+                const loadPackages = async () => {
+                    loading.value = true;
+                    try {
+                        // Simplified - in real app would have list endpoint
+                        packages.value = [];
+                    } catch (e) {
+                        console.error('Failed to load packages:', e);
+                    }
+                    loading.value = false;
+                };
+                
+                const searchPackages = async () => {
+                    if (!packageSearch.value) {
+                        packages.value = [];
+                        return;
+                    }
+                    loading.value = true;
+                    try {
+                        const res = await axios.get(`${API_BASE}/packages/${packageSearch.value}`);
+                        packages.value = [res.data];
+                    } catch (e) {
+                        packages.value = [];
+                    }
+                    loading.value = false;
+                };
+                
+                const selectVulnerability = async (vuln) => {
+                    selectedVulnerability.value = vuln;
+                    detailTab.value = 'info';
+                    commits.value = [];
+                    fileChanges.value = [];
+                    functions.value = [];
+                    
+                    // Load related data
+                    try {
+                        const [commitsRes, filesRes, funcsRes] = await Promise.all([
+                            axios.get(`${API_BASE}/vulnerabilities/${vuln.id}/commits`),
+                            axios.get(`${API_BASE}/vulnerabilities/${vuln.id}/files`),
+                            axios.get(`${API_BASE}/vulnerabilities/${vuln.id}/functions`)
+                        ]);
+                        commits.value = commitsRes.data;
+                        fileChanges.value = filesRes.data;
+                        functions.value = funcsRes.data;
+                    } catch (e) {
+                        console.error('Failed to load vulnerability details:', e);
+                    }
+                };
+                
+                const getSeverityName = (id) => {
+                    const sev = severityLevels.value.find(s => s.id === id);
+                    return sev ? sev.level : 'Unknown';
+                };
+                
+                const getTypeName = (id) => {
+                    const type = vulnerabilityTypes.value.find(t => t.id === id);
+                    return type ? type.name : 'Unknown';
+                };
+                
+                const getSeverityClass = (id) => {
+                    const name = getSeverityName(id).toLowerCase();
+                    return name;
+                };
+                
+                const getFunctionCount = (version) => {
+                    return functions.value.filter(f => f.version === version).length;
+                };
+                
+                const getUnsafeCount = (version) => {
+                    return functions.value.filter(f => f.version === version && f.is_unsafe).length;
+                };
+                
+                const getCountBySeverity = (sevId) => {
+                    return vulnerabilities.value.filter(v => v.severity_id === sevId).length;
+                };
+                
+                const getCountByType = (typeId) => {
+                    return vulnerabilities.value.filter(v => v.type_id === typeId).length;
+                };
+                
+                // Watch view changes
+                currentView.value = currentView.value; // trigger reactivity
+                
+                return {
+                    currentView,
+                    loading,
+                    vulnerabilities,
+                    packages,
+                    severityLevels,
+                    vulnerabilityTypes,
+                    searchQuery,
+                    filterSeverity,
+                    filterType,
+                    packageSearch,
+                    selectedVulnerability,
+                    detailTab,
+                    commits,
+                    fileChanges,
+                    functions,
+                    searchVulnerabilities,
+                    searchPackages,
+                    selectVulnerability,
+                    getSeverityName,
+                    getTypeName,
+                    getSeverityClass,
+                    getFunctionCount,
+                    getUnsafeCount,
+                    getCountBySeverity,
+                    getCountByType
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
