@@ -1,0 +1,12 @@
+# Example tokens configuration file
+# Copy this to tokens.yaml and fill in your actual tokens
+
+# OpenAI/DeepSeek API key for LLM analysis
+openai: ""
+
+# Git provider tokens - add more domains as needed
+git_domains:
+  github.com: ""
+  gitlab.com: ""
+  # bitbucket.org: ""
+  # codeberg.org: ""
