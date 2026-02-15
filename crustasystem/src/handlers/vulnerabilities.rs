@@ -82,6 +82,105 @@ pub async fn list(
     Ok(Json(response))
 }
 
+/// Create a new vulnerability (accepts IDs directly)
+#[utoipa::path(
+    post,
+    path = "/vulnerabilities",
+    request_body = VulnerabilityCreateRequestSimple,
+    responses(
+        (status = 201, description = "Vulnerability created", body = VulnerabilityResponse),
+        (status = 400, description = "Bad request")
+    )
+)]
+pub async fn create_simple(
+    State(state): State<SharedState>,
+    Json(payload): Json<VulnerabilityCreateRequestSimple>,
+) -> Result<Json<VulnerabilityResponse>, StatusCode> {
+    // Validate input
+    if payload.package_id <= 0 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Get package name
+    let package = crate::models::packages::Entity::find_by_id(payload.package_id)
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::BAD_REQUEST)?;
+
+    // Check if vulnerability already exists for this package
+    let existing_vuln = vulnerabilities::Entity::find()
+        .filter(vulnerabilities::Column::PackageName.eq(&package.name))
+        .one(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let vulnerability = if let Some(existing) = existing_vuln {
+        // Update existing vulnerability
+        let type_id = payload.vulnerability_type_ids.first().copied().unwrap_or(1);
+        
+        let updated = vulnerabilities::ActiveModel {
+            id: sea_orm::Set(existing.id),
+            package_name: sea_orm::Set(existing.package_name),
+            severity_id: sea_orm::Set(payload.severity_id),
+            type_id: sea_orm::Set(type_id),
+            summary: sea_orm::Set(payload.summary),
+            details: sea_orm::Set(payload.details),
+            published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
+            created_at: sea_orm::Set(existing.created_at),
+            updated_at: sea_orm::NotSet,
+        };
+
+        updated.update(&state.db)
+            .await
+            .map_err(|e| {
+                eprintln!("Error updating vulnerability: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    } else {
+        // Create new vulnerability
+        let vulnerability = vulnerabilities::ActiveModel {
+            id: sea_orm::NotSet,
+            package_name: sea_orm::Set(package.name),
+            severity_id: sea_orm::Set(payload.severity_id),
+            type_id: sea_orm::Set(payload.vulnerability_type_ids.first().copied().unwrap_or(1)),
+            summary: sea_orm::Set(payload.summary),
+            details: sea_orm::Set(payload.details),
+            published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
+            created_at: sea_orm::NotSet,
+            updated_at: sea_orm::NotSet,
+        };
+
+        vulnerability.insert(&state.db)
+            .await
+            .map_err(|e| {
+                eprintln!("Error creating vulnerability: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+    };
+
+    Ok(Json(VulnerabilityResponse {
+        id: vulnerability.id,
+        package_name: vulnerability.package_name,
+        severity_id: vulnerability.severity_id,
+        type_id: vulnerability.type_id,
+        summary: vulnerability.summary,
+        details: vulnerability.details,
+        published_at: vulnerability.published_at.map(|dt| dt.to_string()),
+    }))
+}
+
+/// Simplified create request that accepts IDs directly
+#[derive(Deserialize, ToSchema)]
+pub struct VulnerabilityCreateRequestSimple {
+    pub package_id: i32,
+    pub severity_id: i32,
+    pub vulnerability_type_ids: Vec<i32>,
+    pub summary: Option<String>,
+    pub details: Option<String>,
+    pub published_at: Option<String>,
+}
+
 /// Get a vulnerability by ID
 #[utoipa::path(
     get,

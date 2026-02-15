@@ -4,7 +4,7 @@ mod db;
 mod models;
 mod handlers;
 
-use axum::{routing::get, Router};
+use axum::{routing::get, routing::post, Router};
 use sea_orm::Database;
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
@@ -37,7 +37,9 @@ async fn main() {
     tracing::info!("Starting Crustasystem API");
 
     let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite://CVEfixes.db".to_string());
+        .unwrap_or_else(|_| "sqlite://crustasystem.db".to_string());
+    
+    tracing::info!("Database URL: {}", db_url);
     
     let db = Database::connect(&db_url)
         .await
@@ -60,9 +62,11 @@ async fn main() {
         // Vulnerability types
         .route("/vulnerability-types", get(handlers::vulnerability_types::list))
         // Packages
+        .route("/packages", post(handlers::packages::create))
         .route("/packages/{name}", get(handlers::packages::get_by_name))
         // Vulnerabilities
         .route("/vulnerabilities", get(handlers::vulnerabilities::list))
+        .route("/vulnerabilities", post(handlers::vulnerabilities::create_simple))
         .route("/vulnerabilities/{id}", get(handlers::vulnerabilities::get_by_id))
         // Swagger
         .merge(SwaggerUi::new("/swagger-ui").url("/openapi.json", ApiDoc::openapi()))
