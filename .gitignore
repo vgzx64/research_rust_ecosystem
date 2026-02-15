@@ -1,5 +1,7 @@
 *.db
-repos_mirror
+repos_mirror/
+repos_worktree/
+regex_result/
 .DS_Store
 test/
 *.csv

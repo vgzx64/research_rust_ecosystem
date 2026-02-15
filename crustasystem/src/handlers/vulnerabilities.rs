@@ -5,15 +5,17 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
-use serde::Deserialize;
+use sea_orm::{EntityTrait, QueryFilter, ColumnTrait, ActiveModelTrait};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::db::SharedState;
 use crate::models::{
     vulnerabilities, vulnerability_ids, fix_commits, file_changes, functions,
+    severity_levels, vulnerability_types, affected_versions, vulnerability_references,
 };
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct ListQuery {
     pub limit: Option<u64>,
     pub offset: Option<u64>,
@@ -22,13 +24,13 @@ pub struct ListQuery {
     pub type_id: Option<i32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SearchQuery {
     pub id_type: String,
     pub id_value: String,
 }
 
-#[derive(serde::Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct VulnerabilityResponse {
     pub id: i32,
     pub package_name: String,
@@ -39,6 +41,14 @@ pub struct VulnerabilityResponse {
     pub published_at: Option<String>,
 }
 
+/// List vulnerabilities with optional filters
+#[utoipa::path(
+    get,
+    path = "/vulnerabilities",
+    responses(
+        (status = 200, description = "List of vulnerabilities", body = [VulnerabilityResponse])
+    )
+)]
 pub async fn list(
     State(state): State<SharedState>,
     Query(query): Query<ListQuery>,
@@ -72,6 +82,15 @@ pub async fn list(
     Ok(Json(response))
 }
 
+/// Get a vulnerability by ID
+#[utoipa::path(
+    get,
+    path = "/vulnerabilities/{id}",
+    responses(
+        (status = 200, description = "Vulnerability found", body = VulnerabilityResponse),
+        (status = 404, description = "Vulnerability not found")
+    )
+)]
 pub async fn get_by_id(
     State(state): State<SharedState>,
     Path(id): Path<i32>,
@@ -124,9 +143,168 @@ pub async fn search(
 }
 
 pub async fn create(
-    State(_state): State<SharedState>,
-) -> Result<Json<String>, StatusCode> {
-    Err(StatusCode::NOT_IMPLEMENTED)
+    State(state): State<SharedState>,
+    Json(payload): Json<VulnerabilityCreateRequest>,
+) -> Result<Json<VulnerabilityResponse>, StatusCode> {
+    // Validate input
+    if payload.package_name.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    // Create or get severity level
+    let severity_id = get_or_create_severity(&state.db, &payload.severity).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create or get vulnerability type
+    let type_id = get_or_create_vulnerability_type(&state.db, &payload.vulnerability_type).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create vulnerability
+    let vulnerability = vulnerabilities::ActiveModel {
+        id: sea_orm::Set(0), // Auto-generated
+        package_name: sea_orm::Set(payload.package_name.clone()),
+        severity_id: sea_orm::Set(severity_id),
+        type_id: sea_orm::Set(type_id),
+        summary: sea_orm::Set(payload.summary),
+        details: sea_orm::Set(payload.details),
+        published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
+        created_at: sea_orm::Set(None),
+        updated_at: sea_orm::Set(None),
+    };
+
+    let vulnerability = vulnerability.insert(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Create vulnerability IDs
+    for id in payload.vulnerability_ids {
+        let vulnerability_id_model = vulnerability_ids::ActiveModel {
+            id: sea_orm::Set(0), // Auto-generated
+            vulnerability_id: sea_orm::Set(vulnerability.id),
+            id_type: sea_orm::Set(id.id_type),
+            id_value: sea_orm::Set(id.id_value),
+        };
+        
+        vulnerability_id_model.insert(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // Create affected versions
+    for version in payload.affected_versions {
+        let affected_version = affected_versions::ActiveModel {
+            id: sea_orm::Set(0), // Auto-generated
+            vulnerability_id: sea_orm::Set(vulnerability.id),
+            version_range: sea_orm::Set(version.version_range),
+            introduced_version: sea_orm::Set(version.introduced_version),
+            fixed_version: sea_orm::Set(version.fixed_version),
+        };
+        
+        affected_version.insert(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    // Create references
+    for reference in payload.references {
+        let reference_model = vulnerability_references::ActiveModel {
+            id: sea_orm::Set(0), // Auto-generated
+            vulnerability_id: sea_orm::Set(vulnerability.id),
+            url: sea_orm::Set(reference.url),
+        };
+        
+        reference_model.insert(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    Ok(Json(VulnerabilityResponse {
+        id: vulnerability.id,
+        package_name: vulnerability.package_name,
+        severity_id: vulnerability.severity_id,
+        type_id: vulnerability.type_id,
+        summary: vulnerability.summary,
+        details: vulnerability.details,
+        published_at: vulnerability.published_at.map(|dt| dt.to_string()),
+    }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct VulnerabilityCreateRequest {
+    pub package_name: String,
+    pub severity: String, // e.g., "HIGH"
+    pub vulnerability_type: String, // e.g., "Memory Management"
+    pub summary: Option<String>,
+    pub details: Option<String>,
+    pub published_at: Option<String>,
+    pub vulnerability_ids: Vec<VulnerabilityIdRequest>,
+    pub affected_versions: Vec<AffectedVersionRequest>,
+    pub references: Vec<ReferenceRequest>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct VulnerabilityIdRequest {
+    pub id_type: String, // "GHSA", "CVE", "RUSTSEC"
+    pub id_value: String,
+}
+
+#[derive(serde::Deserialize)]
+pub struct AffectedVersionRequest {
+    pub version_range: String,
+    pub introduced_version: Option<String>,
+    pub fixed_version: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct ReferenceRequest {
+    pub url: String,
+}
+
+async fn get_or_create_severity(db: &sea_orm::DatabaseConnection, severity: &str) -> Result<i32, sea_orm::DbErr> {
+    use sea_orm::EntityTrait;
+    
+    // Try to find existing severity
+    if let Some(severity_model) = severity_levels::Entity::find()
+        .filter(severity_levels::Column::Level.eq(severity))
+        .one(db)
+        .await? 
+    {
+        return Ok(severity_model.id);
+    }
+
+    // Create new severity level
+    let new_severity = severity_levels::ActiveModel {
+        id: sea_orm::Set(0), // Auto-generated
+        level: sea_orm::Set(severity.to_string()),
+        min_cvss: sea_orm::Set(None),
+        max_cvss: sea_orm::Set(None),
+    };
+
+    let result = new_severity.insert(db).await?;
+    Ok(result.id)
+}
+
+async fn get_or_create_vulnerability_type(db: &sea_orm::DatabaseConnection, vuln_type: &str) -> Result<i32, sea_orm::DbErr> {
+    use sea_orm::EntityTrait;
+    
+    // Try to find existing type
+    if let Some(type_model) = vulnerability_types::Entity::find()
+        .filter(vulnerability_types::Column::Name.eq(vuln_type))
+        .one(db)
+        .await? 
+    {
+        return Ok(type_model.id);
+    }
+
+    // Create new vulnerability type
+    let new_type = vulnerability_types::ActiveModel {
+        id: sea_orm::Set(0), // Auto-generated
+        name: sea_orm::Set(vuln_type.to_string()),
+        description: sea_orm::Set(None),
+    };
+
+    let result = new_type.insert(db).await?;
+    Ok(result.id)
 }
 
 pub async fn update(

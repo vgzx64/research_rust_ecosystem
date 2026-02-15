@@ -3,8 +3,9 @@
 //! Central table for vulnerability records
 
 use sea_orm::entity::prelude::*;
+use serde::Serialize;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize)]
 #[sea_orm(table_name = "vulnerabilities")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = true)]
