@@ -11,8 +11,8 @@ pub struct Model {
     #[sea_orm(primary_key, auto_increment = true)]
     pub id: i32,
     pub package_name: String,
-    pub severity_id: i32,          // FK to severity_levels
-    pub type_id: i32,              // FK to vulnerability_types
+    pub severity_id: Option<i32>,  // FK to severity_levels (nullable)
+    pub type_id: Option<i32>,              // FK to vulnerability_types
     pub summary: Option<String>,
     pub details: Option<String>,
     pub published_at: Option<DateTime>,

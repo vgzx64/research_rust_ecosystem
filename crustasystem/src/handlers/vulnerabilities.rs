@@ -34,8 +34,8 @@ pub struct SearchQuery {
 pub struct VulnerabilityResponse {
     pub id: i32,
     pub package_name: String,
-    pub severity_id: i32,
-    pub type_id: i32,
+    pub severity_id: Option<i32>,
+    pub type_id: Option<i32>,
     pub summary: Option<String>,
     pub details: Option<String>,
     pub published_at: Option<String>,
@@ -60,6 +60,9 @@ pub async fn list(
     }
     if let Some(sev_id) = query.severity_id {
         select = select.filter(vulnerabilities::Column::SeverityId.eq(sev_id));
+    } else {
+        // Filter to only show vulnerabilities with NULL severity
+        select = select.filter(vulnerabilities::Column::SeverityId.is_null());
     }
     if let Some(t_id) = query.type_id {
         select = select.filter(vulnerabilities::Column::TypeId.eq(t_id));
@@ -123,7 +126,7 @@ pub async fn create_simple(
             id: sea_orm::Set(existing.id),
             package_name: sea_orm::Set(existing.package_name),
             severity_id: sea_orm::Set(payload.severity_id),
-            type_id: sea_orm::Set(type_id),
+            type_id: sea_orm::Set(Some(type_id)),
             summary: sea_orm::Set(payload.summary),
             details: sea_orm::Set(payload.details),
             published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
@@ -139,11 +142,12 @@ pub async fn create_simple(
             })?
     } else {
         // Create new vulnerability
+        let type_id = payload.vulnerability_type_ids.first().copied().unwrap_or(1);
         let vulnerability = vulnerabilities::ActiveModel {
             id: sea_orm::NotSet,
             package_name: sea_orm::Set(package.name),
             severity_id: sea_orm::Set(payload.severity_id),
-            type_id: sea_orm::Set(payload.vulnerability_type_ids.first().copied().unwrap_or(1)),
+            type_id: sea_orm::Set(Some(type_id)),
             summary: sea_orm::Set(payload.summary),
             details: sea_orm::Set(payload.details),
             published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
@@ -174,7 +178,7 @@ pub async fn create_simple(
 #[derive(Deserialize, ToSchema)]
 pub struct VulnerabilityCreateRequestSimple {
     pub package_id: i32,
-    pub severity_id: i32,
+    pub severity_id: Option<i32>,
     pub vulnerability_type_ids: Vec<i32>,
     pub summary: Option<String>,
     pub details: Option<String>,
@@ -262,8 +266,8 @@ pub async fn create(
     let vulnerability = vulnerabilities::ActiveModel {
         id: sea_orm::Set(0), // Auto-generated
         package_name: sea_orm::Set(payload.package_name.clone()),
-        severity_id: sea_orm::Set(severity_id),
-        type_id: sea_orm::Set(type_id),
+        severity_id: sea_orm::Set(Some(severity_id)),
+        type_id: sea_orm::Set(Some(type_id)),
         summary: sea_orm::Set(payload.summary),
         details: sea_orm::Set(payload.details),
         published_at: sea_orm::Set(payload.published_at.and_then(|dt| dt.parse().ok())),
