@@ -258,3 +258,162 @@ fn normalize_severity(sev: &str) -> String {
         _ => sev.to_uppercase(),
     }
 }
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_json(json: &str) -> OsvVulnerability {
+        serde_json::from_str(json).expect("Failed to parse JSON")
+    }
+
+    #[test]
+    fn test_parse_basic_vulnerability() {
+        let json = r#"{"id": "GHSA-test-1234", "affected": []}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.id, "GHSA-test-1234");
+    }
+
+    #[test]
+    fn test_package_name_extraction() {
+        let json = r#"{"id": "test", "affected": [{"package": {"name": "my-crate"}}]}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.package_name(), Some("my-crate"));
+    }
+
+    #[test]
+    fn test_package_name_empty_affected() {
+        let json = r#"{"id": "test", "affected": []}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.package_name(), None);
+    }
+
+    #[test]
+    fn test_version_ranges_basic() {
+        let json = r#"{"id": "test", "affected": [{"ranges": [{"type": "SEMVER", "events": [{"introduced": "1.0.0"}, {"fixed": "2.0.0"}]}]}]}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.version_ranges(), ">=1.0.0, <2.0.0");
+    }
+
+    #[test]
+    fn test_version_ranges_empty() {
+        let json = r#"{"id": "test", "affected": [{}]}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.version_ranges(), "");
+    }
+
+    #[test]
+    fn test_severity_from_cvss_score() {
+        let json = r#"{"id": "test", "affected": [], "severity": [{"score": "9.5"}]}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.severity_level(), Some("CRITICAL".to_string()));
+    }
+
+    #[test]
+    fn test_severity_boundaries() {
+        // Test CRITICAL boundary
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "severity": [{"score": "9.0"}]}"#);
+        assert_eq!(vuln.severity_level(), Some("CRITICAL".to_string()));
+        
+        // Test HIGH boundary
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "severity": [{"score": "7.0"}]}"#);
+        assert_eq!(vuln.severity_level(), Some("HIGH".to_string()));
+        
+        // Test MEDIUM boundary
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "severity": [{"score": "4.0"}]}"#);
+        assert_eq!(vuln.severity_level(), Some("MEDIUM".to_string()));
+        
+        // Test LOW
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "severity": [{"score": "3.0"}]}"#);
+        assert_eq!(vuln.severity_level(), Some("LOW".to_string()));
+    }
+
+    #[test]
+    fn test_severity_from_text() {
+        let json = r#"{"id": "test", "affected": [], "database_specific": {"severity": "high"}}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.severity_level(), Some("HIGH".to_string()));
+    }
+
+    #[test]
+    fn test_severity_moderate_to_medium() {
+        let json = r#"{"id": "test", "affected": [], "database_specific": {"severity": "moderate"}}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.severity_level(), Some("MEDIUM".to_string()));
+    }
+
+    #[test]
+    fn test_cwe_ids_extraction() {
+        let json = r#"{"id": "test", "affected": [{"database_specific": {"cwe_ids": ["CWE-787", "CWE-125"]}}]}"#;
+        let vuln = parse_json(json);
+        let cwes = vuln.cwe_ids();
+        assert_eq!(cwes.len(), 2);
+        assert!(cwes.contains(&"CWE-787".to_string()));
+    }
+
+    #[test]
+    fn test_cwe_ids_empty() {
+        let json = r#"{"id": "test", "affected": [{}]}"#;
+        let vuln = parse_json(json);
+        assert!(vuln.cwe_ids().is_empty());
+    }
+
+    #[test]
+    fn test_reference_urls() {
+        let json = r#"{"id": "test", "affected": [], "references": [{"url": "https://example.com"}]}"#;
+        let vuln = parse_json(json);
+        assert_eq!(vuln.reference_urls(), vec!["https://example.com"]);
+    }
+
+    #[test]
+    fn test_reference_urls_empty() {
+        let json = r#"{"id": "test", "affected": []}"#;
+        let vuln = parse_json(json);
+        assert!(vuln.reference_urls().is_empty());
+    }
+
+    #[test]
+    fn test_id_type_ghsa() {
+        let vuln = parse_json(r#"{"id": "GHSA-abc-123", "affected": []}"#);
+        assert_eq!(vuln.id_type(), "GHSA");
+    }
+
+    #[test]
+    fn test_id_type_cve() {
+        let vuln = parse_json(r#"{"id": "CVE-2023-12345", "affected": []}"#);
+        assert_eq!(vuln.id_type(), "CVE");
+    }
+
+    #[test]
+    fn test_id_type_rustsec() {
+        let vuln = parse_json(r#"{"id": "RUSTSEC-2023-0001", "affected": []}"#);
+        assert_eq!(vuln.id_type(), "RUSTSEC");
+    }
+
+    #[test]
+    fn test_id_type_unknown() {
+        let vuln = parse_json(r#"{"id": "OTHER-123", "affected": []}"#);
+        assert_eq!(vuln.id_type(), "UNKNOWN");
+    }
+
+    #[test]
+    fn test_missing_optional_fields() {
+        let vuln = parse_json(r#"{"id": "test", "affected": []}"#);
+        assert!(vuln.summary.is_none());
+        assert!(vuln.details.is_none());
+        assert!(vuln.published.is_none());
+        assert!(vuln.aliases.is_none());
+    }
+
+    #[test]
+    fn test_aliases_parsing() {
+        let json = r#"{"id": "test", "affected": [], "aliases": ["CVE-2023-123", "RUSTSEC-2023-001"]}"#;
+        let vuln = parse_json(json);
+        let aliases = vuln.aliases.unwrap();
+        assert_eq!(aliases.len(), 2);
+    }
+}

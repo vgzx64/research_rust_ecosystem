@@ -343,3 +343,119 @@ async fn insert_vuln_id(
     vuln_id_model.insert(db).await?;
     Ok(())
 }
+
+// ============================================================================
+// Unit Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::worker::osv::OsvVulnerability;
+
+    fn parse_json(json: &str) -> OsvVulnerability {
+        serde_json::from_str(json).expect("Failed to parse JSON")
+    }
+
+    #[test]
+    fn test_group_by_package_single() {
+        let vuln = parse_json(r#"{"id": "test", "affected": [{"package": {"name": "crate-a"}}]}"#);
+        let vulns = vec![&vuln];
+        let grouped = group_by_package(&vulns);
+        assert_eq!(grouped.len(), 1);
+        assert!(grouped.contains_key("crate-a"));
+        assert_eq!(grouped["crate-a"].len(), 1);
+    }
+
+    #[test]
+    fn test_group_by_package_multiple_same() {
+        let vuln1 = parse_json(r#"{"id": "test1", "affected": [{"package": {"name": "crate-a"}}]}"#);
+        let vuln2 = parse_json(r#"{"id": "test2", "affected": [{"package": {"name": "crate-a"}}]}"#);
+        let vulns = vec![&vuln1, &vuln2];
+        let grouped = group_by_package(&vulns);
+        assert_eq!(grouped.len(), 1);
+        assert_eq!(grouped["crate-a"].len(), 2);
+    }
+
+    #[test]
+    fn test_group_by_package_multiple_different() {
+        let vuln1 = parse_json(r#"{"id": "test1", "affected": [{"package": {"name": "crate-a"}}]}"#);
+        let vuln2 = parse_json(r#"{"id": "test2", "affected": [{"package": {"name": "crate-b"}}]}"#);
+        let vulns = vec![&vuln1, &vuln2];
+        let grouped = group_by_package(&vulns);
+        assert_eq!(grouped.len(), 2);
+        assert!(grouped.contains_key("crate-a"));
+        assert!(grouped.contains_key("crate-b"));
+    }
+
+    #[test]
+    fn test_group_by_package_no_package() {
+        let vuln = parse_json(r#"{"id": "test", "affected": []}"#);
+        let vulns = vec![&vuln];
+        let grouped = group_by_package(&vulns);
+        assert!(grouped.is_empty());
+    }
+
+    #[test]
+    fn test_deduplicate_vulnerabilities_single() {
+        let vuln = parse_json(r#"{"id": "test", "affected": [{"package": {"name": "crate"}}]}"#);
+        let vulns = vec![&vuln];
+        let deduped = deduplicate_vulnerabilities(&vulns);
+        assert_eq!(deduped.len(), 1);
+    }
+
+    #[test]
+    fn test_deduplicate_vulnerabilities_empty() {
+        let vulns: Vec<&OsvVulnerability> = vec![];
+        let deduped = deduplicate_vulnerabilities(&vulns);
+        assert!(deduped.is_empty());
+    }
+
+    #[test]
+    fn test_deduplicate_vulnerabilities_multiple() {
+        // Current implementation returns all vulnerabilities
+        let vuln1 = parse_json(r#"{"id": "test1", "affected": [{"package": {"name": "crate"}}]}"#);
+        let vuln2 = parse_json(r#"{"id": "test2", "affected": [{"package": {"name": "crate"}}]}"#);
+        let vulns = vec![&vuln1, &vuln2];
+        let deduped = deduplicate_vulnerabilities(&vulns);
+        assert_eq!(deduped.len(), 2);
+    }
+
+    #[test]
+    fn test_filter_unmaintained() {
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "summary": "This is unmaintained code"}"#);
+        let lower = vuln.summary.as_ref().unwrap().to_lowercase();
+        assert!(lower.contains("unmaint"));
+    }
+
+    #[test]
+    fn test_filter_malicious() {
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "summary": "This contains malicious code"}"#);
+        let lower = vuln.summary.as_ref().unwrap().to_lowercase();
+        assert!(lower.contains("malicious code"));
+    }
+
+    #[test]
+    fn test_filter_no_skip() {
+        let vuln = parse_json(r#"{"id": "test", "affected": [], "summary": "Buffer overflow in parsing"}"#);
+        let lower = vuln.summary.as_ref().unwrap().to_lowercase();
+        assert!(!lower.contains("unmaint"));
+        assert!(!lower.contains("malicious code"));
+    }
+
+    #[test]
+    fn test_filter_no_summary() {
+        let vuln = parse_json(r#"{"id": "test", "affected": []}"#);
+        assert!(vuln.summary.is_none());
+    }
+
+    #[test]
+    fn test_collection_result_default() {
+        let result = CollectionResult::default();
+        assert_eq!(result.total_vulnerabilities, 0);
+        assert_eq!(result.inserted_vulnerabilities, 0);
+        assert_eq!(result.skipped_unmaintained, 0);
+        assert_eq!(result.skipped_malicious, 0);
+        assert_eq!(result.duplicates_merged, 0);
+    }
+}
