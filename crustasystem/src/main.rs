@@ -1,9 +1,5 @@
 //! Crustasystem - Vulnerability Database API
 
-mod db;
-mod models;
-mod handlers;
-
 use axum::{routing::get, routing::post, Router};
 use sea_orm::Database;
 use std::net::SocketAddr;
@@ -11,6 +7,10 @@ use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
+
+// Re-export from lib
+use crustasystem::db;
+use crustasystem::handlers;
 
 // OpenAPI documentation
 #[derive(utoipa::OpenApi)]

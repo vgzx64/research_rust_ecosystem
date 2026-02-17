@@ -45,9 +45,9 @@ impl MigrationTrait for Migration {
                     .col(string(Package::RepositoryUrl).null())
                     .col(string(Package::Homepage).null())
                     .col(string(Package::Description).null())
-                    .col(integer(Package::Downloads))
-                    .col(date_time(Package::CreatedAt))
-                    .col(date_time(Package::UpdatedAt))
+                    .col(integer(Package::Downloads).null())
+                    .col(date_time(Package::CreatedAt).null())
+                    .col(date_time(Package::UpdatedAt).null())
                     .to_owned(),
             )
             .await?;
