@@ -60,9 +60,6 @@ pub async fn list(
     }
     if let Some(sev_id) = query.severity_id {
         select = select.filter(vulnerabilities::Column::SeverityId.eq(sev_id));
-    } else {
-        // Filter to only show vulnerabilities with NULL severity
-        select = select.filter(vulnerabilities::Column::SeverityId.is_null());
     }
     if let Some(t_id) = query.type_id {
         select = select.filter(vulnerabilities::Column::TypeId.eq(t_id));
@@ -163,6 +160,67 @@ pub async fn create_simple(
             })?
     };
 
+    // Store vulnerability IDs (GHSA, CVE, RUSTSEC)
+    for vuln_id in &payload.vulnerability_ids {
+        // Check if this ID already exists
+        let existing_id = vulnerability_ids::Entity::find()
+            .filter(vulnerability_ids::Column::IdType.eq(&vuln_id.id_type))
+            .filter(vulnerability_ids::Column::IdValue.eq(&vuln_id.id_value))
+            .one(&state.db)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        
+        if existing_id.is_none() {
+            let vulnerability_id_model = vulnerability_ids::ActiveModel {
+                id: sea_orm::NotSet,
+                vulnerability_id: sea_orm::Set(vulnerability.id),
+                id_type: sea_orm::Set(vuln_id.id_type.clone()),
+                id_value: sea_orm::Set(vuln_id.id_value.clone()),
+            };
+            
+            vulnerability_id_model.insert(&state.db)
+                .await
+                .map_err(|e| {
+                    eprintln!("Error creating vulnerability ID: {:?}", e);
+                    StatusCode::INTERNAL_SERVER_ERROR
+                })?;
+        }
+    }
+
+    // Store affected versions
+    for version in &payload.affected_versions {
+        let affected_version = affected_versions::ActiveModel {
+            id: sea_orm::NotSet,
+            vulnerability_id: sea_orm::Set(vulnerability.id),
+            version_range: sea_orm::Set(version.version_range.clone()),
+            introduced_version: sea_orm::Set(version.introduced_version.clone()),
+            fixed_version: sea_orm::Set(version.fixed_version.clone()),
+        };
+        
+        affected_version.insert(&state.db)
+            .await
+            .map_err(|e| {
+                eprintln!("Error creating affected version: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
+    // Store references
+    for reference in &payload.references {
+        let reference_model = vulnerability_references::ActiveModel {
+            id: sea_orm::NotSet,
+            vulnerability_id: sea_orm::Set(vulnerability.id),
+            url: sea_orm::Set(reference.url.clone()),
+        };
+        
+        reference_model.insert(&state.db)
+            .await
+            .map_err(|e| {
+                eprintln!("Error creating reference: {:?}", e);
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+    }
+
     Ok(Json(VulnerabilityResponse {
         id: vulnerability.id,
         package_name: vulnerability.package_name,
@@ -183,6 +241,15 @@ pub struct VulnerabilityCreateRequestSimple {
     pub summary: Option<String>,
     pub details: Option<String>,
     pub published_at: Option<String>,
+    /// Vulnerability IDs (GHSA, CVE, RUSTSEC)
+    #[serde(default)]
+    pub vulnerability_ids: Vec<VulnerabilityIdRequest>,
+    /// Affected version ranges
+    #[serde(default)]
+    pub affected_versions: Vec<AffectedVersionRequest>,
+    /// Reference URLs
+    #[serde(default)]
+    pub references: Vec<ReferenceRequest>,
 }
 
 /// Get a vulnerability by ID

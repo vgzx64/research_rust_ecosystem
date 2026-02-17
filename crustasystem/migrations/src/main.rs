@@ -6,7 +6,7 @@ use migrations::Migrator;
 #[tokio::main]
 async fn main() {
     let db_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| "sqlite://crustasystem.db".to_string());
+        .unwrap_or_else(|_| "sqlite://crustasystem.db?mode=rwc".to_string());
     
     println!("Connecting to database: {}", db_url);
     

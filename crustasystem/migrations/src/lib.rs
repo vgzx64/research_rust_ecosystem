@@ -6,6 +6,7 @@ pub use sea_orm_migration::prelude::*;
 
 pub mod m20260215_171037_create_new_schema;
 pub mod m20260217_174900_add_constraints_and_indexes;
+pub mod m20260217_175000_seed_data;
 
 #[async_trait::async_trait]
 impl MigratorTrait for Migrator {
@@ -13,6 +14,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20260215_171037_create_new_schema::Migration),
             Box::new(m20260217_174900_add_constraints_and_indexes::Migration),
+            Box::new(m20260217_175000_seed_data::Migration),
         ]
     }
 }
