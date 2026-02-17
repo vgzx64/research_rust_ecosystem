@@ -10,9 +10,9 @@ use serde::Serialize;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = true)]
     pub id: i32,
-    pub package_name: String,
-    pub severity_id: Option<i32>,  // FK to severity_levels (nullable)
-    pub type_id: Option<i32>,              // FK to vulnerability_types
+    pub package_name: String,        // FK to packages.name (logical relationship)
+    pub severity_id: Option<i32>,    // FK to severity_levels
+    pub type_id: Option<i32>,        // FK to vulnerability_types
     pub summary: Option<String>,
     pub details: Option<String>,
     pub published_at: Option<DateTime>,
@@ -34,6 +34,12 @@ pub enum Relation {
         to = "super::vulnerability_types::Column::Id"
     )]
     VulnerabilityType,
+    #[sea_orm(
+        belongs_to = "super::packages::Entity",
+        from = "Column::PackageName",
+        to = "super::packages::Column::Name"
+    )]
+    Package,
 }
 
 impl Related<super::severity_levels::Entity> for Entity {
@@ -45,6 +51,12 @@ impl Related<super::severity_levels::Entity> for Entity {
 impl Related<super::vulnerability_types::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::VulnerabilityType.def()
+    }
+}
+
+impl Related<super::packages::Entity> for Entity {
+    fn to() -> RelationDef {
+        Relation::Package.def()
     }
 }
 
