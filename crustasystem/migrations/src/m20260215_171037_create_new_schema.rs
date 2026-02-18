@@ -34,50 +34,40 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Create packages table
+        // Create packages table using raw SQL to avoid SeaORM's
+        // "varchar NOT NULL NULL" bug with nullable columns in SQLite
         manager
-            .create_table(
-                Table::create()
-                    .table(Package::Table)
-                    .if_not_exists()
-                    .col(pk_auto(Package::Id))
-                    .col(string(Package::Name).unique_key())
-                    .col(string(Package::RepositoryUrl).null())
-                    .col(string(Package::Homepage).null())
-                    .col(string(Package::Description).null())
-                    .col(integer(Package::Downloads).null())
-                    .col(date_time(Package::CreatedAt).null())
-                    .col(date_time(Package::UpdatedAt).null())
-                    .to_owned(),
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE TABLE IF NOT EXISTS "package" (
+                    "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    "name" varchar NOT NULL UNIQUE,
+                    "repository_url" varchar,
+                    "homepage" varchar,
+                    "description" varchar,
+                    "downloads" integer,
+                    "created_at" datetime_text,
+                    "updated_at" datetime_text
+                )"#,
             )
             .await?;
 
-        // Create vulnerabilities table
+        // Create vulnerabilities table using raw SQL to avoid SeaORM's
+        // "NOT NULL NULL" bug with nullable columns in SQLite
         manager
-            .create_table(
-                Table::create()
-                    .table(Vulnerability::Table)
-                    .if_not_exists()
-                    .col(pk_auto(Vulnerability::Id))
-                    .col(string(Vulnerability::PackageName))
-                    .col(integer(Vulnerability::SeverityId))
-                    .col(integer(Vulnerability::TypeId))
-                    .col(string(Vulnerability::Summary).null())
-                    .col(string(Vulnerability::Details).null())
-                    .col(date_time(Vulnerability::PublishedAt))
-                    .col(date_time(Vulnerability::CreatedAt))
-                    .col(date_time(Vulnerability::UpdatedAt))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Vulnerability::Table, Vulnerability::SeverityId)
-                            .to(SeverityLevel::Table, SeverityLevel::Id),
-                    )
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(Vulnerability::Table, Vulnerability::TypeId)
-                            .to(VulnerabilityType::Table, VulnerabilityType::Id),
-                    )
-                    .to_owned(),
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE TABLE IF NOT EXISTS "vulnerability" (
+                    "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    "package_name" varchar NOT NULL,
+                    "severity_id" integer,
+                    "type_id" integer,
+                    "summary" varchar,
+                    "details" varchar,
+                    "published_at" datetime_text,
+                    "created_at" datetime_text,
+                    "updated_at" datetime_text
+                )"#,
             )
             .await?;
 
@@ -100,23 +90,18 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
-        // Create affected_versions table
+        // Create affected_versions table using raw SQL to avoid SeaORM's
+        // "NOT NULL NULL" bug with nullable columns in SQLite
         manager
-            .create_table(
-                Table::create()
-                    .table(AffectedVersion::Table)
-                    .if_not_exists()
-                    .col(pk_auto(AffectedVersion::Id))
-                    .col(integer(AffectedVersion::VulnerabilityId))
-                    .col(string(AffectedVersion::VersionRange))
-                    .col(string(AffectedVersion::IntroducedVersion))
-                    .col(string(AffectedVersion::FixedVersion))
-                    .foreign_key(
-                        ForeignKey::create()
-                            .from(AffectedVersion::Table, AffectedVersion::VulnerabilityId)
-                            .to(Vulnerability::Table, Vulnerability::Id),
-                    )
-                    .to_owned(),
+            .get_connection()
+            .execute_unprepared(
+                r#"CREATE TABLE IF NOT EXISTS "affected_version" (
+                    "id" integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    "vulnerability_id" integer NOT NULL,
+                    "version_range" varchar NOT NULL,
+                    "introduced_version" varchar,
+                    "fixed_version" varchar
+                )"#,
             )
             .await?;
 

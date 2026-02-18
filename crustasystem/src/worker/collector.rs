@@ -7,7 +7,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, ColumnTrait, QueryFilter, Set, ConnectionTrait, NotSet};
+use sea_orm::{DatabaseConnection, EntityTrait, ActiveModelTrait, ColumnTrait, QueryFilter, Set, ConnectionTrait, TransactionTrait, NotSet};
 use tracing::{info, warn};
 
 use super::osv::OsvVulnerability;
@@ -33,6 +33,11 @@ pub async fn collect_vulnerabilities(
     data_dir: &Path,
 ) -> anyhow::Result<CollectionResult> {
     info!("Starting vulnerability collection from {:?}", data_dir);
+
+    // Enable WAL mode and NORMAL synchronous for much faster writes.
+    // WAL allows concurrent reads and batches fsyncs; NORMAL is safe with WAL.
+    db.execute_unprepared("PRAGMA journal_mode=WAL").await?;
+    db.execute_unprepared("PRAGMA synchronous=NORMAL").await?;
     
     let mut result = CollectionResult::default();
     
@@ -78,10 +83,16 @@ pub async fn collect_vulnerabilities(
     let grouped = group_by_package(&filtered);
     info!("Grouped into {} packages", grouped.len());
     
-    // Clear existing data (full update)
+    // Clear existing data (full update) — outside the transaction so it commits immediately
     clear_vulnerability_data(db).await?;
     info!("Cleared existing vulnerability data");
-    
+
+    // Wrap all inserts in a single transaction — this is the key performance fix.
+    // SQLite commits every auto-transaction to disk (fsync); batching into one
+    // transaction reduces thousands of fsyncs to a single one at commit time.
+    info!("Beginning insert transaction...");
+    let txn = db.begin().await?;
+
     // Process each package group
     for (package_name, vulns) in grouped {
         // Deduplicate within package
@@ -91,7 +102,7 @@ pub async fn collect_vulnerabilities(
         
         // Insert each deduplicated vulnerability
         for vul in deduped {
-            match insert_vulnerability(db, vul, &package_name, &package_repos).await {
+            match insert_vulnerability(&txn, vul, &package_name, &package_repos).await {
                 Ok(_) => result.inserted_vulnerabilities += 1,
                 Err(e) => {
                     warn!("Failed to insert vulnerability {}: {:?}", vul.id, e);
@@ -99,6 +110,9 @@ pub async fn collect_vulnerabilities(
             }
         }
     }
+
+    txn.commit().await?;
+    info!("Transaction committed");
     
     info!("Collection complete: {:?}", result);
     Ok(result)
@@ -114,9 +128,11 @@ fn load_package_repositories(path: &Path) -> anyhow::Result<HashMap<String, Stri
     
     for result in csv_reader.records() {
         let record = result?;
-        // crates.csv columns: id, name, updated_at, created_at, downloads, ...
-        // We need 'name' and 'repository'
-        if let (Some(name), Some(repo)) = (record.get(1), record.get(13)) {
+        // crates.csv columns (0-indexed, header row skipped by csv::Reader):
+        // 0:created_at, 1:description, 2:documentation, 3:homepage, 4:id,
+        // 5:max_features, 6:max_upload_size, 7:name, 8:readme, 9:repository,
+        // 10:trustpub_only, 11:updated_at
+        if let (Some(name), Some(repo)) = (record.get(7), record.get(9)) {
             if !repo.is_empty() {
                 repos.insert(name.to_string(), repo.to_string());
             }
@@ -179,12 +195,15 @@ async fn clear_vulnerability_data(db: &DatabaseConnection) -> anyhow::Result<()>
 }
 
 /// Insert a vulnerability into the database
-async fn insert_vulnerability(
-    db: &DatabaseConnection,
+async fn insert_vulnerability<C>(
+    db: &C,
     vul: &OsvVulnerability,
     package_name: &str,
     package_repos: &HashMap<String, String>,
-) -> anyhow::Result<i32> {
+) -> anyhow::Result<i32>
+where
+    C: ConnectionTrait,
+{
     // Get or create package
     let repo_url = package_repos.get(package_name).cloned();
     let _package = get_or_create_package(db, package_name, repo_url).await?;
@@ -260,11 +279,14 @@ async fn insert_vulnerability(
 }
 
 /// Get or create a package
-async fn get_or_create_package(
-    db: &DatabaseConnection,
+async fn get_or_create_package<C>(
+    db: &C,
     name: &str,
     repo_url: Option<String>,
-) -> anyhow::Result<i32> {
+) -> anyhow::Result<i32>
+where
+    C: ConnectionTrait,
+{
     // Check if package exists
     let existing = packages::Entity::find()
         .filter(packages::Column::Name.eq(name))
@@ -292,7 +314,10 @@ async fn get_or_create_package(
 }
 
 /// Get severity level ID
-async fn get_severity_id(db: &DatabaseConnection, severity: Option<&str>) -> anyhow::Result<Option<i32>> {
+async fn get_severity_id<C>(db: &C, severity: Option<&str>) -> anyhow::Result<Option<i32>>
+where
+    C: ConnectionTrait,
+{
     let Some(sev) = severity else { return Ok(None) };
     
     let level = severity_levels::Entity::find()
@@ -304,7 +329,10 @@ async fn get_severity_id(db: &DatabaseConnection, severity: Option<&str>) -> any
 }
 
 /// Get vulnerability type ID
-async fn get_type_id(db: &DatabaseConnection, type_name: Option<&str>) -> anyhow::Result<Option<i32>> {
+async fn get_type_id<C>(db: &C, type_name: Option<&str>) -> anyhow::Result<Option<i32>>
+where
+    C: ConnectionTrait,
+{
     let Some(name) = type_name else { return Ok(None) };
     
     let vuln_type = vulnerability_types::Entity::find()
@@ -316,12 +344,15 @@ async fn get_type_id(db: &DatabaseConnection, type_name: Option<&str>) -> anyhow
 }
 
 /// Insert a vulnerability ID mapping
-async fn insert_vuln_id(
-    db: &DatabaseConnection,
+async fn insert_vuln_id<C>(
+    db: &C,
     vuln_id: i32,
     id_type: &str,
     id_value: &str,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<()>
+where
+    C: ConnectionTrait,
+{
     // Check if already exists
     let existing = vulnerability_ids::Entity::find()
         .filter(vulnerability_ids::Column::IdType.eq(id_type))
