@@ -6,3 +6,5 @@ test/
 __pycache__/
 compiler_result*/
 tokens.yaml
+
+repos_worktree/
