@@ -1,0 +1,45 @@
+[package]
+name = "unsafe-analysis-ra"
+version = "0.1.0"
+edition = "2021"
+authors = ["Xiaoye Zheng <xiaoyez@zju.edu.cn>"]
+
+[[bin]]
+name = "unsafe_analysis_ra"
+path = "src/main.rs"
+
+[dependencies]
+# rust-analyzer crates (local path dependencies)
+load-cargo = { path = "../../rust-analyzer/crates/load-cargo" }
+hir = { path = "../../rust-analyzer/crates/hir" }
+ide-db = { path = "../../rust-analyzer/crates/ide-db" }
+base-db = { path = "../../rust-analyzer/crates/base-db" }
+project-model = { path = "../../rust-analyzer/crates/project-model" }
+vfs = { path = "../../rust-analyzer/crates/vfs" }
+vfs-notify = { path = "../../rust-analyzer/crates/vfs-notify" }
+syntax = { path = "../../rust-analyzer/crates/syntax" }
+span = { path = "../../rust-analyzer/crates/span" }
+intern = { path = "../../rust-analyzer/crates/intern" }
+cfg = { path = "../../rust-analyzer/crates/cfg", features = ["tt", "syntax"] }
+tt = { path = "../../rust-analyzer/crates/tt" }
+hir-expand = { path = "../../rust-analyzer/crates/hir-expand" }
+proc-macro-api = { path = "../../rust-analyzer/crates/proc-macro-api" }
+stdx = { path = "../../rust-analyzer/crates/stdx" }
+profile = { path = "../../rust-analyzer/crates/profile" }
+parser = { path = "../../rust-analyzer/crates/parser" }
+
+# serde for JSON output
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# other dependencies
+anyhow = "1.0"
+itertools = "0.14"
+crossbeam-channel = "0.5"
+tracing = "0.1"
+
+# local decls crate for data structures
+decls = { path = "../decls" }
+
+[package.metadata.rust-analyzer]
+rustc_private = true
