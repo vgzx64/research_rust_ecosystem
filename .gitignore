@@ -8,3 +8,5 @@ compiler_result*/
 tokens.yaml
 
 repos_worktree/
+target/
+rust_analyzer
