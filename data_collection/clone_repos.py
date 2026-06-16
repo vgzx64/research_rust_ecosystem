@@ -55,15 +55,31 @@ def get_ref_links():
 
     return df_fixes
 
-def clone_repo(repo_url, repo_dest_path):
+def clone_or_update_repo(repo_url, repo_dest_path):
+    """
+    Clone a repository as a mirror if it doesn't exist, or update it if it does.
+    """
     try:
-        logging.info("Cloning from remote...")
-        if ".git" not in repo_url:
-            os.system("git clone --mirror "+repo_url+".git"+" "+repo_dest_path)
+        if os.path.exists(repo_dest_path):
+            if is_git_repo(repo_dest_path):
+                logging.info("Repository exists. Fetching updates...")
+                os.system("git --git-dir=" + repo_dest_path + " remote update")
+                logging.info("Fetching done!")
+            else:
+                logging.info("Path exists but is not a valid git repo. Removing and re-cloning...")
+                shutil.rmtree(repo_dest_path)
+                if ".git" not in repo_url:
+                    os.system("git clone --mirror "+repo_url+".git"+" "+repo_dest_path)
+                else:
+                    os.system("git clone --mirror "+repo_url+" "+repo_dest_path)
+                logging.info("Cloning done!")
         else:
-            os.system("git clone --mirror "+repo_url+" "+repo_dest_path)
-            # Repo.clone_from(repo_url, repo_dest_path)
-        logging.info("Cloning done!")
+            logging.info("Cloning from remote...")
+            if ".git" not in repo_url:
+                os.system("git clone --mirror "+repo_url+".git"+" "+repo_dest_path)
+            else:
+                os.system("git clone --mirror "+repo_url+" "+repo_dest_path)
+            logging.info("Cloning done!")
         
     except Exception as e:
         raise e
@@ -79,7 +95,7 @@ def handle_url(url):
 
 def clone_repos(df_fixes):
     """
-    Clone repos
+    Clone or update repos
     """
     
     repo_urls = df_fixes["repo_url"].apply(lambda x: handle_url(x)).unique()
@@ -93,19 +109,12 @@ def clone_repos(df_fixes):
             continue
         pcount += 1
         logging.info('-' * 70)
-        logging.info("[{}/{}] About to clone {}".format(pcount, num_repos, repo_url))
+        logging.info("[{}/{}] About to clone/update {}".format(pcount, num_repos, repo_url))
         full_project_name = get_full_project_name(repo_url)
         repo_dest_path = os.path.join(dest, full_project_name)
-        if os.path.exists(repo_dest_path):
-            if is_git_repo(repo_dest_path):
-                # logging.info("Repository already clone. Skipping.")
-                continue
-            else:
-                shutil.rmtree(repo_dest_path)
         try:
-            _ = clone_repo(repo_url, repo_dest_path)
+            _ = clone_or_update_repo(repo_url, repo_dest_path)
         except Exception as e:
-            # logging.info('-' * 70)
             logging.warning("Problem occurred while retrieving the project: {}\n {}".format(repo_url, e))
             cnt += 1
             pass
