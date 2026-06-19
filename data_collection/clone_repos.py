@@ -19,11 +19,11 @@ MIRROR_DIR = f"{ROOT_PATH}/../repos_mirror"
 
 def run_git_command(command: str) -> subprocess.CompletedProcess:
     """
-    Run a git command via subprocess with GIT_ASKPASS=/bin/false to prevent
-    interactive password prompts.
+    Run a git command via subprocess with GIT_ASKPASS and GIT_TERMINAL_PROMPT
+    to prevent interactive password prompts.
 
     Args:
-        command: The git command to run (without GIT_ASKPASS prefix).
+        command: The git command to run.
 
     Returns:
         subprocess.CompletedProcess with stdout/stderr captured.
@@ -31,12 +31,13 @@ def run_git_command(command: str) -> subprocess.CompletedProcess:
     Raises:
         subprocess.CalledProcessError: If the git command exits with non-zero status.
     """
-    full_command = f"GIT_ASKPASS=/bin/false {command}"
+    full_command = f"GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/bin/false {command}"
     result = subprocess.run(
         full_command,
         shell=True,
         capture_output=True,
         text=True,
+        stdin=subprocess.DEVNULL,
     )
     if result.returncode != 0:
         raise subprocess.CalledProcessError(
