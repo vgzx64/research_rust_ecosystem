@@ -6,6 +6,7 @@ import os
 import sys
 import subprocess
 import pandas as pd
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f'{ROOT_PATH}/../utils')
@@ -15,6 +16,26 @@ from utils import get_full_project_name, is_git_repo
 
 # Directory where mirrored repositories are stored
 MIRROR_DIR = f"{ROOT_PATH}/../repos_mirror"
+
+import argparse
+
+parser = argparse.ArgumentParser(description="Clone or update vulnerable Rust repositories.")
+parser.add_argument(
+    "--skip-first-n-repos",
+    type=int,
+    default=0,
+    help="Skip the first N repositories (useful for resuming after interruption).",
+)
+parser.add_argument(
+    "--workers",
+    type=int,
+    default=4,
+    help="Number of parallel clone/fetch workers.",
+)
+args = parser.parse_args()
+
+skip_first_n_repos = args.skip_first_n_repos
+n_workers = args.workers
 
 
 def run_git_command(command: str) -> subprocess.CompletedProcess:
@@ -164,39 +185,64 @@ def handle_url(url: str) -> str:
     return url
 
 
+def _process_one(repo_url: str) -> bool:
+    """
+    Clone/update a single repo. Returns True on success, False on failure.
+
+    This is the per-worker unit extracted for parallel execution.
+    """
+    # ponytail: standalone function avoids per-thread wrapper objects
+    full_project_name = get_full_project_name(repo_url)
+    if not full_project_name:
+        return False
+
+    repo_dest_path = os.path.join(MIRROR_DIR, full_project_name)
+
+    try:
+        clone_or_update_repo(repo_url, repo_dest_path)
+        return True
+    except Exception as e:
+        logging.warning(
+            f"Problem occurred while retrieving the project: {repo_url}\n {e}"
+        )
+        return False
+
+
 def clone_repos(df_fixes: pd.DataFrame):
     """
     Clone or update all repositories listed in the fix commits DataFrame.
 
-    Iterates over unique repository URLs, cloning missing repos and
-    fetching updates for existing ones.
+    Uses a thread pool to process repos concurrently.
 
     Args:
         df_fixes: DataFrame containing a 'repo_url' column.
     """
     repo_urls = df_fixes["repo_url"].apply(lambda x: handle_url(x)).unique()
 
+    # Filter non-git URLs and apply skip_first_n
+    relevant_urls = [url for url in repo_urls if "git" in url]
+    relevant_urls = relevant_urls[skip_first_n_repos:]
+
+    logging.info(
+        f"Processing {len(relevant_urls)} repos with {n_workers} workers "
+        f"(skipped first {skip_first_n_repos})"
+    )
+
     fail_count = 0
-    total = len(repo_urls)
+    completed = 0
+    total = len(relevant_urls)
 
-    for i, repo_url in enumerate(repo_urls, start=1):
-        # Skip non-git URLs (e.g., crates.io links, plain text descriptions)
-        if "git" not in repo_url:
-            continue
-
-        logging.info("-" * 70)
-        logging.info(f"[{i}/{total}] About to clone/update {repo_url}")
-
-        full_project_name = get_full_project_name(repo_url)
-        repo_dest_path = os.path.join(MIRROR_DIR, full_project_name)
-
-        try:
-            clone_or_update_repo(repo_url, repo_dest_path)
-        except Exception as e:
-            logging.warning(
-                f"Problem occurred while retrieving the project: {repo_url}\n {e}"
-            )
-            fail_count += 1
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        futures = {
+            executor.submit(_process_one, url): url for url in relevant_urls
+        }
+        for future in as_completed(futures):
+            completed += 1
+            url = futures[future]
+            ok = future.result()
+            if not ok:
+                fail_count += 1
+            logging.info(f"[{completed}/{total}] {'OK' if ok else 'FAIL'} {url}")
 
     print(fail_count)
 
@@ -234,9 +280,3 @@ def get_num_vul_has_repo():
 if __name__ == "__main__":
     clone_repos(get_ref_links())
     get_num_vul_has_repo()
-
-# Worktree setup notes (used for checking out historical commits):
-#   git worktree add ../test2
-#   cd ../test2
-#   git checkout <commit-hash>
-#   git reset --soft HEAD@{1}
