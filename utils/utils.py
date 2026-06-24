@@ -11,8 +11,13 @@ def adjust_message(message):
     return re.sub(r" +", " ", stripped_message)
 
 def get_full_project_name(repo_url):
-    org_name = repo_url.rsplit('/', 2)[1]
-    project_name = repo_url.rsplit('/', 2)[2]
+    if repo_url is None or repo_url == '' or repo_url == 'None':
+        return ''
+    parts = repo_url.rsplit('/', 2)
+    if len(parts) < 3:
+        return ''
+    org_name = parts[1]
+    project_name = parts[2]
     return org_name + "_" + project_name
 
 def is_git_repo(path):

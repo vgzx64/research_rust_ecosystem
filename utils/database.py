@@ -68,7 +68,7 @@ def write_database(table, df):
         if df is not None and not df.empty:
             with conn:
                 # ---appending each function data to the tables---
-                df = df.applymap(str)
+                df = df.map(str)
                 df.to_sql(name=table, con=conn, if_exists="append", index=False)
     except Exception as e:
         print('Problem while writing to database!', e)
