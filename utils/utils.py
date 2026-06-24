@@ -3,6 +3,36 @@ from git import Repo, exc
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
+# Shared regex: matches any known git hosting URL and captures owner/project
+# Covers: github, gitlab, bitbucket, codeberg, sr.ht, gitee, and self-hosted variants
+_GIT_URL_RE = re.compile(
+    r'https?://(?:[a-zA-Z0-9-]+\.)*(?:bitbucket|github|gitlab|git|gitee|sr\.ht|torproject|gnome|redox-os)'
+    r'(?:\.[a-zA-Z0-9-]+)+'
+    r'/(?P<owner>[^/#?]+)/(?P<project>[^/#?]+?)(?:\.git)?(?:/|$)',
+    re.IGNORECASE,
+)
+
+
+def parse_git_url(url):
+    """
+    Extract (owner, project) from a git hosting URL.
+
+    Returns (owner, project) on success, or (None, None) if the URL
+    doesn't match a known git hosting service pattern.
+
+    >>> parse_git_url("https://github.com/apollographql/router.git")
+    ('apollographql', 'router')
+    >>> parse_git_url("https://github.com/apollographql/router/")
+    ('apollographql', 'router')
+    """
+    if not url or url in ('', 'None'):
+        return None, None
+    m = _GIT_URL_RE.search(url)
+    if m:
+        return m.group('owner'), m.group('project')
+    return None, None
+
+
 def adjust_message(message):
     message_no_carriage = message.replace("\r", "\n")
     one_newline_message = re.sub(r"\n+", "\n", message_no_carriage)
@@ -10,15 +40,19 @@ def adjust_message(message):
     stripped_message = clear_message.strip()
     return re.sub(r" +", " ", stripped_message)
 
+
 def get_full_project_name(repo_url):
     if repo_url is None or repo_url == '' or repo_url == 'None':
         return ''
+    owner, project = parse_git_url(repo_url)
+    if owner and project:
+        return owner + "_" + project
+    # Fallback: rsplit-based attempt for unrecognised formats
     parts = repo_url.rsplit('/', 2)
     if len(parts) < 3:
         return ''
-    org_name = parts[1]
-    project_name = parts[2]
-    return org_name + "_" + project_name
+    return parts[1] + "_" + parts[2].replace('.git', '')
+
 
 def is_git_repo(path):
     try:
