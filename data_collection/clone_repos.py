@@ -17,27 +17,6 @@ from utils import get_full_project_name, is_git_repo
 # Directory where mirrored repositories are stored
 MIRROR_DIR = f"{ROOT_PATH}/../repos_mirror"
 
-import argparse
-
-parser = argparse.ArgumentParser(description="Clone or update vulnerable Rust repositories.")
-parser.add_argument(
-    "--skip-first-n-repos",
-    type=int,
-    default=0,
-    help="Skip the first N repositories (useful for resuming after interruption).",
-)
-parser.add_argument(
-    "--workers",
-    type=int,
-    default=4,
-    help="Number of parallel clone/fetch workers.",
-)
-args = parser.parse_args()
-
-skip_first_n_repos = args.skip_first_n_repos
-n_workers = args.workers
-
-
 def run_git_command(command: str) -> subprocess.CompletedProcess:
     """
     Run a git command via subprocess with GIT_ASKPASS and GIT_TERMINAL_PROMPT
@@ -126,6 +105,7 @@ def clone_or_update_repo(repo_url: str, repo_dest_path: str):
     Raises:
         Exception: If the clone/fetch operation fails.
     """
+    repo_url = handle_url(repo_url)
     try:
         if os.path.exists(repo_dest_path):
             # Path exists — check if it's a valid git repo
@@ -174,6 +154,9 @@ def handle_url(url: str) -> str:
 
     For non-GitHub URLs, returns the URL unchanged.
     """
+    # Strip trailing slash to avoid router/.git vs router.git confusion
+    url = url.rstrip("/")
+
     if "github" in url:
         # Handle URLs that include extra path segments (e.g., /issues, /pull,
         # /tree/main). Keep only the owner/repo part.
@@ -208,7 +191,7 @@ def _process_one(repo_url: str) -> bool:
         return False
 
 
-def clone_repos(df_fixes: pd.DataFrame):
+def clone_repos(df_fixes: pd.DataFrame, skip_first_n_repos: int = 0, n_workers: int = 4):
     """
     Clone or update all repositories listed in the fix commits DataFrame.
 
@@ -216,6 +199,8 @@ def clone_repos(df_fixes: pd.DataFrame):
 
     Args:
         df_fixes: DataFrame containing a 'repo_url' column.
+        skip_first_n_repos: Skip the first N repositories (useful for resuming).
+        n_workers: Number of parallel clone/fetch workers.
     """
     repo_urls = df_fixes["repo_url"].apply(lambda x: handle_url(x)).unique()
 
@@ -278,5 +263,22 @@ def get_num_vul_has_repo():
 
 
 if __name__ == "__main__":
-    clone_repos(get_ref_links())
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Clone or update vulnerable Rust repositories.")
+    parser.add_argument(
+        "--skip-first-n-repos",
+        type=int,
+        default=0,
+        help="Skip the first N repositories (useful for resuming after interruption).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="Number of parallel clone/fetch workers.",
+    )
+    args = parser.parse_args()
+
+    clone_repos(get_ref_links(), skip_first_n_repos=args.skip_first_n_repos, n_workers=args.workers)
     get_num_vul_has_repo()
