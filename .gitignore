@@ -6,6 +6,8 @@ test/
 __pycache__/
 compiler_result*/
 tokens.yaml
+git_data_cache*/
+extraction_audit_log.json
 
 repos_worktree/
 target/
