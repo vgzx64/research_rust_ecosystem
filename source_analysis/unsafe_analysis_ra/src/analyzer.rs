@@ -1,6 +1,6 @@
 use anyhow::Result;
 use hir::{Crate, Function, HasSource, Module, ModuleDef, Trait};
-use hir_expand::HirFileId;
+use hir_expand::{HirFileId, InFile};
 use ide_db::RootDatabase;
 use ide_db::base_db::SourceDatabase;
 use span::TextSize;
@@ -43,14 +43,6 @@ pub struct AnalysisResult {
     pub unsafe_fn_count: i32,
     pub unsafe_block_count: i32,
     pub safe_block_count: i32,
-}
-
-/// Convert HirFileId to a raw FileId
-fn hir_file_to_file_id<'a>(db: &'a RootDatabase, hir_file_id: HirFileId) -> Option<FileId> {
-    match hir_file_id {
-        HirFileId::FileId(editioned) => Some(editioned.file_id(db)),
-        _ => None,
-    }
 }
 
 /// Main analysis function - walks the HIR to find all unsafe items
@@ -109,6 +101,9 @@ fn analyze_module(
 
     for decl in declarations {
         match decl {
+            ModuleDef::Module(module) => {
+                analyze_module(db, vfs, module, result)?;
+            }
             ModuleDef::Function(func) => {
                 analyze_function(db, vfs, func, result)?;
             }
@@ -165,15 +160,10 @@ fn analyze_function(
     });
 
     // Find unsafe blocks within this function body
-    let unsafe_blocks = find_unsafe_blocks_in_function(db, vfs, func)?;
+    let (safe_blocks, unsafe_block_count, unsafe_blocks) = find_blocks_in_function(db, vfs, func)?;
+    result.safe_block_count += safe_blocks;
+    result.unsafe_block_count += unsafe_block_count;
     if !unsafe_blocks.is_empty() {
-        for block in &unsafe_blocks {
-            if block.unsafety {
-                result.unsafe_block_count += 1;
-            } else {
-                result.safe_block_count += 1;
-            }
-        }
         result.blocks.push(unsafe_blocks);
     }
 
@@ -190,30 +180,24 @@ fn get_function_spans(
 
     match source {
         Some(in_file) => {
-            let hir_file_id = in_file.file_id;
-            let file_id_raw = match hir_file_to_file_id(db, hir_file_id) {
-                Some(id) => id,
-                None => return Ok((String::new(), String::new())),
-            };
             let ast_fn = in_file.value;
+            let header_range = InFile::new(in_file.file_id, ast_fn.syntax().text_range())
+                .original_node_file_range_rooted(db);
+            let file_id_raw = header_range.file_id.file_id(db);
 
             // Get file path from file ID
             let file_path = get_file_path(vfs, file_id_raw);
 
-            // Get the text range of the function signature (header)
-            let header_range = ast_fn.syntax().text_range();
-            let header_start = header_range.start();
-            let header_end = header_range.end();
-
             // Convert byte offsets to line numbers
-            let header_start_line = byte_offset_to_line(db, file_id_raw, header_start);
-            let header_end_line = byte_offset_to_line(db, file_id_raw, header_end);
+            let header_start_line = byte_offset_to_line(db, file_id_raw, header_range.range.start());
+            let header_end_line = byte_offset_to_line(db, file_id_raw, header_range.range.end());
 
             // Get the body span
             let body_span = if let Some(body) = ast_fn.body() {
-                let body_range = body.syntax().text_range();
-                let body_start_line = byte_offset_to_line(db, file_id_raw, body_range.start());
-                let body_end_line = byte_offset_to_line(db, file_id_raw, body_range.end());
+                let body_range = InFile::new(in_file.file_id, body.syntax().text_range())
+                    .original_node_file_range_rooted(db);
+                let body_start_line = byte_offset_to_line(db, file_id_raw, body_range.range.start());
+                let body_end_line = byte_offset_to_line(db, file_id_raw, body_range.range.end());
                 format!("{}: {}-{}", file_path, body_start_line, body_end_line)
             } else {
                 format!("{}: {}-{}", file_path, header_start_line, header_end_line)
@@ -227,21 +211,18 @@ fn get_function_spans(
     }
 }
 
-/// Find unsafe blocks within a function body
-fn find_unsafe_blocks_in_function(
+/// Find blocks within a function body
+fn find_blocks_in_function(
     db: &RootDatabase,
     vfs: &Vfs,
     func: Function,
-) -> Result<Vec<BlockInfo>> {
+) -> Result<(i32, i32, Vec<BlockInfo>)> {
     let mut blocks = Vec::new();
+    let mut safe_block_count = 0;
+    let mut unsafe_block_count = 0;
 
     let source = func.source(db);
     if let Some(in_file) = source {
-        let hir_file_id = in_file.file_id;
-        let file_id_raw = match hir_file_to_file_id(db, hir_file_id) {
-            Some(id) => id,
-            None => return Ok(blocks),
-        };
         let ast_fn = in_file.value;
         let fn_name = func.name(db).display(db, span::Edition::Edition2021).to_string();
         let module = func.module(db);
@@ -250,29 +231,41 @@ fn find_unsafe_blocks_in_function(
 
         // Walk the function body looking for unsafe blocks
         if let Some(body) = ast_fn.body() {
-            find_unsafe_blocks_recursive(db, vfs, file_id_raw, &body.syntax(), &fn_id, &mut blocks)?;
+            find_blocks_recursive(
+                db,
+                vfs,
+                in_file.file_id,
+                &body.syntax(),
+                &fn_id,
+                &mut blocks,
+                &mut safe_block_count,
+                &mut unsafe_block_count,
+            )?;
         }
     }
 
-    Ok(blocks)
+    Ok((safe_block_count, unsafe_block_count, blocks))
 }
 
 /// Recursively walk AST nodes looking for unsafe blocks
-fn find_unsafe_blocks_recursive(
+fn find_blocks_recursive(
     db: &RootDatabase,
     vfs: &Vfs,
-    file_id: FileId,
+    file_id: HirFileId,
     node: &syntax::SyntaxNode,
     fn_id: &str,
     blocks: &mut Vec<BlockInfo>,
+    safe_block_count: &mut i32,
+    unsafe_block_count: &mut i32,
 ) -> Result<()> {
     // Check if this node is a block expression with unsafe
     if let Some(block_expr) = ast::BlockExpr::cast(node.clone()) {
+        let range = InFile::new(file_id, block_expr.syntax().text_range()).original_node_file_range_rooted(db);
         if block_expr.unsafe_token().is_some() {
-            let file_path = get_file_path(vfs, file_id);
-            let range = block_expr.syntax().text_range();
-            let start_line = byte_offset_to_line(db, file_id, range.start());
-            let end_line = byte_offset_to_line(db, file_id, range.end());
+            let file_id_raw = range.file_id.file_id(db);
+            let file_path = get_file_path(vfs, file_id_raw);
+            let start_line = byte_offset_to_line(db, file_id_raw, range.range.start());
+            let end_line = byte_offset_to_line(db, file_id_raw, range.range.end());
             let block_span = format!("{}: {}-{}", file_path, start_line, end_line);
 
             blocks.push(BlockInfo {
@@ -280,12 +273,24 @@ fn find_unsafe_blocks_recursive(
                 block_span,
                 unsafety: true,
             });
+            *unsafe_block_count += 1;
+        } else {
+            *safe_block_count += 1;
         }
     }
 
     // Recurse into children
     for child in node.children() {
-        find_unsafe_blocks_recursive(db, vfs, file_id, &child, fn_id, blocks)?;
+        find_blocks_recursive(
+            db,
+            vfs,
+            file_id,
+            &child,
+            fn_id,
+            blocks,
+            safe_block_count,
+            unsafe_block_count,
+        )?;
     }
 
     Ok(())
@@ -305,15 +310,12 @@ fn analyze_trait(
     let source = trait_.source(db);
     let loc = match source {
         Some(in_file) => {
-            let hir_file_id = in_file.file_id;
-            let file_id_raw = match hir_file_to_file_id(db, hir_file_id) {
-                Some(id) => id,
-                None => return Ok(()),
-            };
+            let file_range = InFile::new(in_file.file_id, in_file.value.syntax().text_range())
+                .original_node_file_range_rooted(db);
+            let file_id_raw = file_range.file_id.file_id(db);
             let file_path = get_file_path(vfs, file_id_raw);
-            let range = in_file.value.syntax().text_range();
-            let start_line = byte_offset_to_line(db, file_id_raw, range.start());
-            let end_line = byte_offset_to_line(db, file_id_raw, range.end());
+            let start_line = byte_offset_to_line(db, file_id_raw, file_range.range.start());
+            let end_line = byte_offset_to_line(db, file_id_raw, file_range.range.end());
             format!("file: \"{}\" line \"{}-{}\"", file_path, start_line, end_line)
         }
         None => return Ok(()),
@@ -330,6 +332,14 @@ fn analyze_trait(
         loc,
     });
 
+    for item in trait_.items(db) {
+        if let Some(func) = item.as_function() {
+            if func.has_body(db) {
+                analyze_function(db, vfs, func, result)?;
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -340,18 +350,22 @@ fn analyze_impl(
     impl_: hir::Impl,
     result: &mut AnalysisResult,
 ) -> Result<()> {
+    for item in impl_.items(db) {
+        if let Some(func) = item.as_function() {
+            analyze_function(db, vfs, func, result)?;
+        }
+    }
+
     let source = impl_.source(db);
     let ast_impl = match source {
         Some(in_file) => in_file,
         None => return Ok(()),
     };
 
-    let hir_file_id = ast_impl.file_id;
-    let file_id_raw = match hir_file_to_file_id(db, hir_file_id) {
-        Some(id) => id,
-        None => return Ok(()),
-    };
     let impl_ast = ast_impl.value;
+    let file_range = InFile::new(ast_impl.file_id, impl_ast.syntax().text_range())
+        .original_node_file_range_rooted(db);
+    let file_id_raw = file_range.file_id.file_id(db);
 
     // Check if the impl is for an unsafe trait
     let is_unsafe_trait_impl = impl_ast.trait_().is_some() && impl_ast.unsafe_token().is_some();
@@ -381,11 +395,9 @@ fn analyze_impl(
             }
         })
         .unwrap_or_default();
-
     let file_path = get_file_path(vfs, file_id_raw);
-    let range = impl_ast.syntax().text_range();
-    let start_line = byte_offset_to_line(db, file_id_raw, range.start());
-    let end_line = byte_offset_to_line(db, file_id_raw, range.end());
+    let start_line = byte_offset_to_line(db, file_id_raw, file_range.range.start());
+    let end_line = byte_offset_to_line(db, file_id_raw, file_range.range.end());
     let loc = format!("file: \"{}\" line \"{}-{}\"", file_path, start_line, end_line);
 
     // Skip external crate items
