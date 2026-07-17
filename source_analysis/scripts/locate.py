@@ -84,15 +84,10 @@ def main(commitfile):
     df_error = pd.DataFrame(columns=['cve_id', 'hash'])
 
     for _, row in df.iterrows():
-        # Note: some datasets refer to a list of CVEs as 'cve_id',
-        # and some use just cve_id with ONLY first cve_id
-        cve_ids_str = row['cve_id']
         commit_hash = row['hash']
+        cve_id = str(row['cve_id'])
         repo_url = row["repo_url"]
         print(repo_url)
-
-        cve_ids = eval(cve_ids_str)
-        cve_id = cve_ids[0]
         # try:  
         # get file diff, meta information about VEC and VFC
         df_file = pd.read_sql("SELECT old_path, new_path, diff_parsed FROM file_change WHERE hash=\""+commit_hash+"\"", con=db.conn)
@@ -113,7 +108,7 @@ def main(commitfile):
             # print(commit_hash)
             # print(repo_url)
             df_error.loc[len(df_error)] = {
-                "cve_id": cve_ids_str,
+                "cve_id": cve_id,
                 "hash": repo_url+"/commit/"+commit_hash
             }
             continue
@@ -126,7 +121,7 @@ def main(commitfile):
             
         if df_func.empty and df_func_fix.empty:
             df_error.loc[len(df_error)] = {
-                "cve_id": cve_ids_str,
+                "cve_id": cve_id,
                 "hash": repo_url+"/commit/"+commit_hash
             }
             continue
@@ -171,12 +166,12 @@ def main(commitfile):
         unsafe_func_names = len(set(unsafe_func_names))
         if vul_unsafe_func==0 and vul_safe_func==0 and vul_unsafe_block==0 and fix_unsafe_func==0 and fix_unsafe_block==0 and fix_unsafe_block==0:
             df_error.loc[len(df_error)] = {
-                "cve_id": cve_ids_str,
+                "cve_id": cve_id,
                 "hash": repo_url+"/commit/"+commit_hash
             }
         else:
             df_result.loc[len(df_result)] = {
-                "cve_id":cve_ids_str,
+                "cve_id":cve_id,
                 "hash": commit_hash, 
                 "unsafe_func": vul_unsafe_func, 
                 "safe_func": vul_safe_func ,

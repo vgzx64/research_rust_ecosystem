@@ -49,10 +49,9 @@ def main(datafile):
 
     for index, row in df_fixes.iterrows():
         repo_url = row["repo_url"]
-        cve_ids = eval(row["cve_id"])
+        id = str(row["cve_id"])
         hash = row["hash"]
 
-        cve_id = cve_ids[0]
         full_project_name = get_full_project_name(repo_url)
         repo_dest_path = os.path.join(dest, full_project_name)
         work_tree_path = os.path.join(dest_work, full_project_name)
@@ -63,13 +62,13 @@ def main(datafile):
                     get_worktree(repo_dest_path, work_tree_path)
 
                     # Analyze vulnerable version (before fix)
-                    analysis_dir = f"{analysis_result}/{full_project_name}/{cve_id}/{hash}"
+                    analysis_dir = f"{analysis_result}/{full_project_name}/{id}/{hash}"
                     if not os.path.exists(analysis_dir):
                         print("git check ", commit.parents[0])
                         cmd_gc = check_head + " " + work_tree_path + " " + commit.parents[0]
                         os.system(cmd_gc)
                         # Run the analysis script
-                        if os.system(analyze_script + " " + work_tree_path + " " + cve_id + " " + commit.parents[0] + " " + analysis_dir) == 0:
+                        if os.system(analyze_script + " " + work_tree_path + " " + id + " " + commit.parents[0] + " " + analysis_dir) == 0:
                             success_cnt += 1
                             success_list.append(full_project_name)
                         else:
@@ -80,17 +79,17 @@ def main(datafile):
                         print("success_cnt =", success_cnt)
                         print("total =", success_cnt + fail_cnt)
                     else:
-                        print("{}: Vulnerability existing already analyzed!".format(cve_id))
+                        print("{}: Vulnerability existing already analyzed!".format(id))
                         success_list.append(full_project_name)
                         success_cnt += 1
 
                     # Analyze fixed version (after fix)
-                    analysis_dir = f"{analysis_result}/{full_project_name}/{cve_id}_fix/{hash}"
+                    analysis_dir = f"{analysis_result}/{full_project_name}/{id}_fix/{hash}"
                     if not os.path.exists(analysis_dir):
                         print("git check ", commit.hash)
                         os.system(check_head + " " + work_tree_path + " " + commit.hash)
                         # Run the analysis script
-                        if os.system(analyze_script + " " + work_tree_path + " " + cve_id + "_fix" + " " + commit.hash + " " + analysis_dir) == 0:
+                        if os.system(analyze_script + " " + work_tree_path + " " + id + "_fix" + " " + commit.hash + " " + analysis_dir) == 0:
                             success_cnt_fix += 1
                         else:
                             fail_cnt_fix += 1
@@ -99,7 +98,7 @@ def main(datafile):
                         print("success_cnt_fix =", success_cnt_fix)
                         print("total =", fail_cnt_fix + success_cnt_fix)
                     else:
-                        print("{}: Vulnerability fixing commit already analyzed!".format(cve_id))
+                        print("{}: Vulnerability fixing commit already analyzed!".format(id))
                         success_cnt_fix += 1
 
                 except Exception as e:
