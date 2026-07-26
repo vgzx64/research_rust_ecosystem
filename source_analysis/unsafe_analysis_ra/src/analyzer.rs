@@ -3,6 +3,7 @@ use hir::{Crate, Function, HasSource, Module, ModuleDef, Trait};
 use hir_expand::{HirFileId, InFile};
 use ide_db::RootDatabase;
 use ide_db::base_db::SourceDatabase;
+use std::path::Path;
 use span::TextSize;
 use syntax::{AstNode, ast};
 use vfs::{FileId, Vfs};
@@ -46,7 +47,7 @@ pub struct AnalysisResult {
 }
 
 /// Main analysis function - walks the HIR to find all unsafe items
-pub fn analyze(db: &RootDatabase, vfs: &Vfs) -> Result<AnalysisResult> {
+pub fn analyze(db: &RootDatabase, vfs: &Vfs, project_root: &Path) -> Result<AnalysisResult> {
     let mut result = AnalysisResult {
         functions: Vec::new(),
         blocks: Vec::new(),
@@ -62,7 +63,7 @@ pub fn analyze(db: &RootDatabase, vfs: &Vfs) -> Result<AnalysisResult> {
     let crates = hir::Crate::all(db);
 
     for krate in crates {
-        analyze_crate(db, vfs, krate, &mut result)?;
+        analyze_crate(db, vfs, project_root, krate, &mut result)?;
     }
 
     Ok(result)
@@ -72,19 +73,20 @@ pub fn analyze(db: &RootDatabase, vfs: &Vfs) -> Result<AnalysisResult> {
 fn analyze_crate(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     krate: Crate,
     result: &mut AnalysisResult,
 ) -> Result<()> {
     let modules = krate.modules(db);
 
     for module in modules {
-        analyze_module(db, vfs, module, result)?;
+        analyze_module(db, vfs, project_root, module, result)?;
     }
 
     // Analyze unsafe trait impls for this crate
     let impls = hir::Impl::all_in_crate(db, krate);
     for impl_ in impls {
-        analyze_impl(db, vfs, impl_, result)?;
+        analyze_impl(db, vfs, project_root, impl_, result)?;
     }
 
     Ok(())
@@ -94,6 +96,7 @@ fn analyze_crate(
 fn analyze_module(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     module: Module,
     result: &mut AnalysisResult,
 ) -> Result<()> {
@@ -102,13 +105,13 @@ fn analyze_module(
     for decl in declarations {
         match decl {
             ModuleDef::Module(module) => {
-                analyze_module(db, vfs, module, result)?;
+                analyze_module(db, vfs, project_root, module, result)?;
             }
             ModuleDef::Function(func) => {
-                analyze_function(db, vfs, func, result)?;
+                analyze_function(db, vfs, project_root, func, result)?;
             }
             ModuleDef::Trait(trait_) => {
-                analyze_trait(db, vfs, trait_, result)?;
+                analyze_trait(db, vfs, project_root, trait_, result)?;
             }
             // Other item types are not relevant for unsafe analysis
             _ => {}
@@ -122,6 +125,7 @@ fn analyze_module(
 fn analyze_function(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     func: Function,
     result: &mut AnalysisResult,
 ) -> Result<()> {
@@ -131,7 +135,7 @@ fn analyze_function(
     let module_name = module.name(db).map(|n| n.display(db, span::Edition::Edition2021).to_string()).unwrap_or_default();
 
     // Get source location for the function
-    let (header_span, body_span) = get_function_spans(db, vfs, func)?;
+    let (header_span, body_span) = get_function_spans(db, vfs, project_root, func)?;
 
     // Skip functions without valid source locations (e.g., from macros in external crates)
     if header_span.is_empty() {
@@ -160,7 +164,7 @@ fn analyze_function(
     });
 
     // Find unsafe blocks within this function body
-    let (safe_blocks, unsafe_block_count, unsafe_blocks) = find_blocks_in_function(db, vfs, func)?;
+    let (safe_blocks, unsafe_block_count, unsafe_blocks) = find_blocks_in_function(db, vfs, project_root, func)?;
     result.safe_block_count += safe_blocks;
     result.unsafe_block_count += unsafe_block_count;
     if !unsafe_blocks.is_empty() {
@@ -174,6 +178,7 @@ fn analyze_function(
 fn get_function_spans(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     func: Function,
 ) -> Result<(String, String)> {
     let source = func.source(db);
@@ -186,7 +191,7 @@ fn get_function_spans(
             let file_id_raw = header_range.file_id.file_id(db);
 
             // Get file path from file ID
-            let file_path = get_file_path(vfs, file_id_raw);
+            let file_path = get_file_path(vfs, project_root, file_id_raw);
 
             // Convert byte offsets to line numbers
             let header_start_line = byte_offset_to_line(db, file_id_raw, header_range.range.start());
@@ -215,6 +220,7 @@ fn get_function_spans(
 fn find_blocks_in_function(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     func: Function,
 ) -> Result<(i32, i32, Vec<BlockInfo>)> {
     let mut blocks = Vec::new();
@@ -234,6 +240,7 @@ fn find_blocks_in_function(
             find_blocks_recursive(
                 db,
                 vfs,
+                project_root,
                 in_file.file_id,
                 &body.syntax(),
                 &fn_id,
@@ -251,6 +258,7 @@ fn find_blocks_in_function(
 fn find_blocks_recursive(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     file_id: HirFileId,
     node: &syntax::SyntaxNode,
     fn_id: &str,
@@ -263,7 +271,7 @@ fn find_blocks_recursive(
         let range = InFile::new(file_id, block_expr.syntax().text_range()).original_node_file_range_rooted(db);
         if block_expr.unsafe_token().is_some() {
             let file_id_raw = range.file_id.file_id(db);
-            let file_path = get_file_path(vfs, file_id_raw);
+            let file_path = get_file_path(vfs, project_root, file_id_raw);
             let start_line = byte_offset_to_line(db, file_id_raw, range.range.start());
             let end_line = byte_offset_to_line(db, file_id_raw, range.range.end());
             let block_span = format!("{}: {}-{}", file_path, start_line, end_line);
@@ -284,6 +292,7 @@ fn find_blocks_recursive(
         find_blocks_recursive(
             db,
             vfs,
+            project_root,
             file_id,
             &child,
             fn_id,
@@ -300,6 +309,7 @@ fn find_blocks_recursive(
 fn analyze_trait(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     trait_: Trait,
     result: &mut AnalysisResult,
 ) -> Result<()> {
@@ -313,7 +323,7 @@ fn analyze_trait(
             let file_range = InFile::new(in_file.file_id, in_file.value.syntax().text_range())
                 .original_node_file_range_rooted(db);
             let file_id_raw = file_range.file_id.file_id(db);
-            let file_path = get_file_path(vfs, file_id_raw);
+            let file_path = get_file_path(vfs, project_root, file_id_raw);
             let start_line = byte_offset_to_line(db, file_id_raw, file_range.range.start());
             let end_line = byte_offset_to_line(db, file_id_raw, file_range.range.end());
             format!("file: \"{}\" line \"{}-{}\"", file_path, start_line, end_line)
@@ -335,7 +345,7 @@ fn analyze_trait(
     for item in trait_.items(db) {
         if let Some(func) = item.as_function() {
             if func.has_body(db) {
-                analyze_function(db, vfs, func, result)?;
+                analyze_function(db, vfs, project_root, func, result)?;
             }
         }
     }
@@ -347,12 +357,13 @@ fn analyze_trait(
 fn analyze_impl(
     db: &RootDatabase,
     vfs: &Vfs,
+    project_root: &Path,
     impl_: hir::Impl,
     result: &mut AnalysisResult,
 ) -> Result<()> {
     for item in impl_.items(db) {
         if let Some(func) = item.as_function() {
-            analyze_function(db, vfs, func, result)?;
+            analyze_function(db, vfs, project_root, func, result)?;
         }
     }
 
@@ -395,7 +406,7 @@ fn analyze_impl(
             }
         })
         .unwrap_or_default();
-    let file_path = get_file_path(vfs, file_id_raw);
+    let file_path = get_file_path(vfs, project_root, file_id_raw);
     let start_line = byte_offset_to_line(db, file_id_raw, file_range.range.start());
     let end_line = byte_offset_to_line(db, file_id_raw, file_range.range.end());
     let loc = format!("file: \"{}\" line \"{}-{}\"", file_path, start_line, end_line);
@@ -415,11 +426,15 @@ fn analyze_impl(
 }
 
 /// Get the file path from a file ID
-fn get_file_path(vfs: &Vfs, file_id: FileId) -> String {
+fn get_file_path(vfs: &Vfs, project_root: &Path, file_id: FileId) -> String {
     let vfs_path = vfs.file_path(file_id);
 
     if let Some(abs_path) = vfs_path.as_path() {
-        abs_path.to_string()
+        let abs_path = std::convert::AsRef::<Path>::as_ref(abs_path);
+        match abs_path.strip_prefix(project_root) {
+            Ok(relative_path) => relative_path.to_string_lossy().to_string(),
+            Err(_) => abs_path.display().to_string(),
+        }
     } else {
         format!("virtual:{}", file_id.index())
     }

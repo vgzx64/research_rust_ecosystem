@@ -13,7 +13,8 @@ export HASH="$3"
 export FULL_ANALYSIS_DIR="$4"
 
 # Path to the new analysis binary
-ANALYSIS_BIN="$(dirname "$0")/../unsafe_analysis_ra/target/release/unsafe_analysis_ra"
+SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd -P)
+ANALYSIS_BIN="$SCRIPT_DIR/../unsafe_analysis_ra/target/release/unsafe_analysis_ra"
 
 # Check if the binary exists
 if [ ! -f "$ANALYSIS_BIN" ]; then
@@ -28,5 +29,6 @@ if [ ! -d "$FULL_ANALYSIS_DIR" ]; then
 fi
 
 # Run the analysis
-cd "$1"
-"$ANALYSIS_BIN" "$1" "$FULL_ANALYSIS_DIR" "" "$CVE_ID" "$HASH"
+PROJECT_ROOT=$(cd "$1" && pwd -P)
+cd "$PROJECT_ROOT"
+"$ANALYSIS_BIN" "$PROJECT_ROOT" "$FULL_ANALYSIS_DIR" "" "$CVE_ID" "$HASH"

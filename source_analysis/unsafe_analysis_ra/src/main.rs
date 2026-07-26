@@ -45,7 +45,7 @@ fn main() -> Result<()> {
     eprintln!("Workspace loaded successfully");
 
     // Run the analysis
-    let analysis_result = analyzer::analyze(&db, &vfs)?;
+    let analysis_result = analyzer::analyze(&db, &vfs, project_path)?;
 
     eprintln!(
         "Analysis complete: {} functions ({} safe, {} unsafe), {} unsafe blocks, {} unsafe traits, {} unsafe trait impls",
