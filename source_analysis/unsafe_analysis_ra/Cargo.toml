@@ -1,8 +1,8 @@
 [package]
 name = "unsafe-analysis-ra"
 version = "0.1.0"
-edition = "2021"
-authors = ["Xiaoye Zheng <xiaoyez@zju.edu.cn>"]
+edition = "2024"
+authors = []
 
 [[bin]]
 name = "unsafe_analysis_ra"
