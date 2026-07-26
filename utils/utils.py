@@ -1,7 +1,5 @@
 import re
 from git import Repo, exc
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
 # Shared regex: matches any known git hosting URL and captures owner/project
 # Covers: github, gitlab, bitbucket, codeberg, sr.ht, gitee, and self-hosted variants
@@ -62,6 +60,9 @@ def is_git_repo(path):
         return False
     
 def plot_evolution(x, y, ylabel, savepath, evol=True, xlog=False, ylog=False):
+    import matplotlib.dates as mdates
+    import matplotlib.pyplot as plt
+
     plt.ioff()
     plt.style.use('seaborn-v0_8-colorblind') 
     fig, ax = plt.subplots(1, 1, figsize=(15, 10))
