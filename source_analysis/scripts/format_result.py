@@ -1,6 +1,6 @@
 import sys
 import os
-import glob
+from pathlib import Path
 import pandas as pd
 import json
 import click
@@ -15,92 +15,62 @@ ordered_columns_block = ['cve_id', 'hash', 'fn_id', 'path', "span_start", "span_
 ordered_columns_num = ['cve_id', 'hash', 'safe_func', 'unsafe_func', 'unsafe_block']
 compiler_result = "../../compiler_result_v3"
 
+span_pattern = re.compile(r'^(?P<path>.+?):\s*(?P<span_start>\d+)-(?P<span_end>\d+)$')
+trait_loc_pattern = re.compile(r'file:\s*"(?P<path>[^"]+)"\s+line\s+"(?P<span_start>\d+)-(?P<span_end>\d+)"')
+
+def _read_metadata_value(line):
+    match = re.search(r':\s*(\d+)\s*$', line)
+    return int(match.group(1)) if match else 0
+
 def read_json_file(f):
-    jsonList = []
-    num_unsafe = 0
+    json_list = []
     num_safe = 0
-    with open(f) as file:  
-        jsonObj = ""  
-        lines = file.readlines()
-        num_unsafe = int(lines[1].split(': ')[1])
-        num_safe = int(lines[0].split(': ')[1])
-        for line in lines:
-            if line[0] == "#":
-                continue
-            elif line!="}\n":
-                jsonObj += line
-            else:
-                jsonObj += line
-                jsonDict = json.loads(jsonObj)
-                jsonList.append(jsonDict)
-                jsonObj = ""
-    return jsonList, num_safe, num_unsafe
-
-def read_json_list_file(f):
-    jsonList = []
-    num_unsafe = 0
-    with open(f) as file:  
-        jsonObj = ""  
-        lines = file.readlines()
-        num_unsafe = int(lines[1].split(': ')[1])
-        for line in lines:
-            if line[0] == "#":
-                continue
-            elif line!="]\n":
-                jsonObj += line
-            else:
-                jsonObj += line
-                jsonDict = json.loads(jsonObj)
-                if len(jsonDict)>0:
-                    jsonList.extend(jsonDict)
-                jsonObj = ""
-    return jsonList, num_unsafe
-
-def read_json_list_file_v3(f):
-    jsonList = []
     num_unsafe = 0
     with open(f) as file:
+        json_obj = ""
         lines = file.readlines()
-        num_unsafe = int(lines[1].split(': ')[1])
+        if len(lines) > 0:
+            num_safe = _read_metadata_value(lines[0])
+        if len(lines) > 1:
+            num_unsafe = _read_metadata_value(lines[1])
+
         for line in lines:
-            if line[0] == "#":
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
                 continue
-            line = line.strip()
-            if line:
-                jsonDict = json.loads(line)
-                if isinstance(jsonDict, list) and len(jsonDict) > 0:
-                    jsonList.extend(jsonDict)
-                elif isinstance(jsonDict, dict):
-                    jsonList.append(jsonDict)
-    return jsonList, num_unsafe
 
-_SPAN_RE = re.compile(r'^(.*?\.rs):\s*(?:(\d+):\d+:\s*)?(\d+)[-:](\d+)$')
+            json_obj += line
+            try:
+                json_value = json.loads(json_obj)
+            except json.JSONDecodeError:
+                continue
 
-def parse_span(span):
-    """Returns (span_start, span_end, path) from either v2 or v3 format.
-    
-    V3 spans use absolute worktree paths; normalizes them to relative
-    so the DB path matches file_change.old_path/new_path.
-    """
-    m = _SPAN_RE.match(span)
-    if m:
-        path = m.group(1)
-        start = m.group(3)
-        end = m.group(4)
-        # ponytail: v3 paths are absolute worktree paths like
-        # /mnt/.../repos_worktree/project/src/foo.rs. Strip the prefix
-        # so path matches the relative paths in file_change table.
-        if '/repos_worktree/' in path:
-            path = path.split('repos_worktree/', 1)[1]
-            path = path.split('/', 1)[1]
-        return start, end, path
-    # ponytail: shouldn't happen with current data, but keep as safety net
-    parts = span.split(': ')
-    path = parts[0]
-    rest = parts[-1]
-    start, end = rest.split('-') if '-' in rest else (rest, rest)
-    start = start.strip()
-    return start, end, path
+            if isinstance(json_value, list):
+                json_list.extend(json_value)
+            else:
+                json_list.append(json_value)
+            json_obj = ""
+
+    return json_list, num_safe, num_unsafe
+
+
+def read_json_list_file(f):
+    json_list, _, num_unsafe = read_json_file(f)
+    return json_list, num_unsafe
+
+
+def parse_span(span_text):
+    match = span_pattern.match(span_text.strip())
+    if match is None:
+        return None, None, None
+    return match.group("path"), match.group("span_start"), match.group("span_end")
+
+
+def parse_trait_loc(loc_text):
+    match = trait_loc_pattern.search(loc_text)
+    if match is None:
+        return None, None, None
+    return match.group("path"), match.group("span_start"), match.group("span_end")
 
 def format_functions(f, cve_id, commit_hash):
     jsonList, num_safe, num_unsafe = read_json_file(f)
@@ -115,7 +85,9 @@ def format_functions(f, cve_id, commit_hash):
 
     if df.empty:
         return df,0, 0
-    df['span_start'], df['span_end'], df['path'] = zip(*df['header_span'].map(parse_span))
+    spans = df['header_span'].apply(parse_span)
+    df[['path', 'span_start', 'span_end']] = pd.DataFrame(spans.tolist(), index=df.index)
+    df = df[df['path'].notna()]
     df["cve_id"] = cve_id
     df["hash"] = commit_hash
     df = df[ordered_columns]
@@ -124,12 +96,7 @@ def format_functions(f, cve_id, commit_hash):
     return df,num_safe, num_unsafe
 
 def format_blocks(f, cve_id, commit_hash):
-    try:
-        jsonList, num_unsafe = read_json_list_file_v3(f)
-        if not jsonList:
-            jsonList, num_unsafe = read_json_list_file(f)
-    except Exception:
-        jsonList, num_unsafe = read_json_list_file(f)
+    jsonList, num_unsafe = read_json_list_file(f)
 
     df = pd.DataFrame.from_records(jsonList)
     if not df.empty:
@@ -140,7 +107,9 @@ def format_blocks(f, cve_id, commit_hash):
         df = df[df.apply(lambda x: ".rs" in x.block_span, axis=1)]
     if df.empty:
         return df, 0
-    df['span_start'], df['span_end'], df['path'] = zip(*df['block_span'].map(parse_span))
+    spans = df['block_span'].apply(parse_span)
+    df[['path', 'span_start', 'span_end']] = pd.DataFrame(spans.tolist(), index=df.index)
+    df = df[df['path'].notna()]
     df["hash"] = commit_hash
     df["cve_id"] = cve_id
     df = df[ordered_columns_block]
@@ -148,22 +117,20 @@ def format_blocks(f, cve_id, commit_hash):
     return df, num_unsafe
 
 def format_traits(f, package, cve_id, commit_hash):
-    jsonList = read_json_file(f)
+    jsonList, _, _ = read_json_file(f)
     df = pd.DataFrame.from_records(jsonList)
     if df.empty:
         return df
     df['fn_id'] = df['name'].apply(lambda x : hash(x+cve_id) & sys.maxsize)
-    def get_loc(x):
-        start = x.find("line \"")+6
-        return x[start:-1]
-    df['span'] = df['loc'].apply(lambda x: get_loc(x))
+    spans = df['loc'].apply(parse_trait_loc)
+    df[['path', 'span_start', 'span_end']] = pd.DataFrame(spans.tolist(), index=df.index)
+    df = df[df['path'].notna()]
     del df["loc"]
-    del df["safe"]
+    df["unsafety"] = ~df["safe"]
     df["package"] = package
     df["cve_id"] = cve_id
     df["hash"] = commit_hash
-    df["unsafety"] = True
-    df = df[ordered_columns]
+    df = df[['cve_id', 'hash', 'package', 'fn_id', 'path', 'span_start', 'span_end', 'name', 'safe', 'unsafety']]
     return df
 
 def drop_tables():
@@ -175,30 +142,27 @@ def drop_tables():
     mycursor.execute("DROP TABLE IF EXISTS function_fix;")
     mycursor.execute("DROP TABLE IF EXISTS total_safe_unsafe;")
 
-# recursive glob finds files at any depth, handling v2's flat
-# {project}/{cve}/{hash}/{crate}/ layout and v3's deeper
-# {project}/{cve}/{hash}/{hash}/{cve}/{crate_hash}/ layout transparently.
 def format_compile(analysis_dir, cve_id, hash):
     total_fn_safe = 0
     total_fn_unsafe = 0
     total_block_unsafe = 0
     df_func = pd.DataFrame()
     df_block = pd.DataFrame()
+    analysis_root = Path(analysis_dir)
 
-    for f_func in glob.glob(os.path.join(analysis_dir, '**', '01_functions*'), recursive=True):
-        # Filter out non-crate-file paths (keep only the deepest nested files)
-        if os.path.dirname(f_func) == analysis_dir:
+    for f_func in sorted(analysis_root.rglob('01_functions*')):
+        if f_func.parent == analysis_root:
             continue
-        df, num_safe, num_unsafe = format_functions(f_func, cve_id, hash)
+        df, num_safe, num_unsafe = format_functions(str(f_func), cve_id, hash)
         if not df.empty:
             df_func = pd.concat([df_func, df])
         total_fn_safe += num_safe
         total_fn_unsafe += num_unsafe
 
-    for f_block in glob.glob(os.path.join(analysis_dir, '**', '02_blocks_in_function*'), recursive=True):
-        if os.path.dirname(f_block) == analysis_dir:
+    for f_block in sorted(analysis_root.rglob('02_blocks_in_function*')):
+        if f_block.parent == analysis_root:
             continue
-        df, num_unsafe = format_blocks(f_block, cve_id, hash)
+        df, num_unsafe = format_blocks(str(f_block), cve_id, hash)
         if not df.empty:
             df_block = pd.concat([df_block, df])
         total_block_unsafe += num_unsafe
