@@ -11,16 +11,13 @@ mod output;
 fn main() -> Result<()> {
     // Parse command-line arguments
     let args: Vec<String> = env::args().collect();
-    if args.len() < 3 {
-        eprintln!("Usage: {} <project_path> <output_dir> [crate_name] [cve_id] [hash]", args[0]);
+    if args.len() < 5 {
+        eprintln!("Usage: {} <project_path> <output_dir> <cve_id> <hash>", args[0]);
         std::process::exit(1);
     }
 
     let project_path = Path::new(&args[1]);
     let output_dir = Path::new(&args[2]);
-    let crate_name = args.get(3).map(|s| s.as_str()).unwrap_or("");
-    let cve_id = args.get(4).map(|s| s.as_str()).unwrap_or("");
-    let hash = args.get(5).map(|s| s.as_str()).unwrap_or("");
 
     eprintln!("Analyzing project: {}", project_path.display());
     eprintln!("Output directory: {}", output_dir.display());
@@ -58,13 +55,7 @@ fn main() -> Result<()> {
     );
 
     // Output results
-    output::write_results(
-        &analysis_result,
-        output_dir,
-        crate_name,
-        cve_id,
-        hash,
-    )?;
+    output::write_results(&analysis_result, output_dir)?;
 
     eprintln!("Results written to {}", output_dir.display());
 

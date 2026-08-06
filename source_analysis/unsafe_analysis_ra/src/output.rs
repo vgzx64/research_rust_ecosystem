@@ -11,27 +11,21 @@ use crate::analyzer::AnalysisResult;
 pub fn write_results(
     result: &AnalysisResult,
     output_dir: &Path,
-    crate_name: &str,
-    cve_id: &str,
-    hash: &str,
 ) -> Result<()> {
-    // Create the output directory structure
-    let dir_path = output_dir.join(crate_name).join(cve_id).join(hash);
-    DirBuilder::new()
-        .recursive(true)
-        .create(&dir_path)?;
+    // The orchestrator already passes the final output leaf.
+    DirBuilder::new().recursive(true).create(output_dir)?;
 
     // Write functions file (01_functions)
-    write_functions_file(result, &dir_path)?;
+    write_functions_file(result, output_dir)?;
 
     // Write blocks file (02_blocks_in_function)
-    write_blocks_file(result, &dir_path)?;
+    write_blocks_file(result, output_dir)?;
 
     // Write unsafe traits file (02_unsafe_traits)
-    write_traits_file(result, &dir_path)?;
+    write_traits_file(result, output_dir)?;
 
     // Write unsafe trait impls file (03_unsafe_traits_impls)
-    write_trait_impls_file(result, &dir_path)?;
+    write_trait_impls_file(result, output_dir)?;
 
     Ok(())
 }

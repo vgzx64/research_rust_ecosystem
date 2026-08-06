@@ -21,15 +21,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
-name = "atomic-polyfill"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
-dependencies = [
- "critical-section",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -44,7 +35,6 @@ dependencies = [
  "indexmap",
  "intern",
  "la-arena",
- "query-group-macro",
  "rustc-hash 2.1.2",
  "salsa",
  "salsa-macros",
@@ -77,12 +67,6 @@ name = "boxcar"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36f64beae40a84da1b4b26ff2761a5b895c12adc41dc25aaee1c4f2bbfe97a6e"
-
-[[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
@@ -166,12 +150,6 @@ name = "cov-mark"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90863d8442510cddf7f46618c4f92413774635771a3e80830c8b30d183420b14"
-
-[[package]]
-name = "critical-section"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
 
 [[package]]
 name = "crossbeam-channel"
@@ -338,15 +316,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ab85b9b05e3978cc9a9cf8fea7f01b494e1a09ed3037e16ba39edc7a29eb61a"
 
 [[package]]
-name = "hash32"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -363,15 +332,6 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
-dependencies = [
- "foldhash 0.2.0",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
@@ -383,25 +343,11 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.11.1"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824e001ac4f3012dd16a264bec811403a67ca9deb6c102fc5049b32c4574b35f"
+checksum = "32069d97bb81e38fa67eab65e3393bf804bb85969f2bc06bf13f64aef5aba248"
 dependencies = [
- "hashbrown 0.16.1",
-]
-
-[[package]]
-name = "heapless"
-version = "0.7.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
-dependencies = [
- "atomic-polyfill",
- "hash32",
- "rustc_version",
- "serde",
- "spin",
- "stable_deref_trait",
+ "hashbrown 0.17.1",
 ]
 
 [[package]]
@@ -416,10 +362,11 @@ dependencies = [
  "hir-expand",
  "hir-ty",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "la-arena",
  "ra-ap-rustc_type_ir",
  "rustc-hash 2.1.2",
+ "salsa",
  "serde_json",
  "smallvec",
  "span",
@@ -445,15 +392,13 @@ dependencies = [
  "hir-expand",
  "indexmap",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "la-arena",
- "query-group-macro",
  "ra-ap-rustc_abi",
  "ra-ap-rustc_parse_format",
  "rustc-hash 2.1.2",
  "rustc_apfloat",
  "salsa",
- "salsa-macros",
  "smallvec",
  "span",
  "stdx",
@@ -474,13 +419,11 @@ dependencies = [
  "cov-mark",
  "either",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "mbe",
  "parser",
- "query-group-macro",
  "rustc-hash 2.1.2",
  "salsa",
- "salsa-macros",
  "smallvec",
  "span",
  "stdx",
@@ -506,12 +449,11 @@ dependencies = [
  "hir-expand",
  "indexmap",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "la-arena",
  "macros",
  "oorandom",
  "petgraph",
- "query-group-macro",
  "ra-ap-rustc_abi",
  "ra-ap-rustc_ast_ir",
  "ra-ap-rustc_index",
@@ -521,7 +463,6 @@ dependencies = [
  "rustc-hash 2.1.2",
  "rustc_apfloat",
  "salsa",
- "salsa-macros",
  "serde",
  "serde_derive",
  "smallvec",
@@ -537,15 +478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "home"
-version = "0.5.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc627f471c528ff0c4a49e1d5e60450c8f6461dd6d10ba9dcd3a61d3dff7728d"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "ide-db"
 version = "0.0.0"
 dependencies = [
@@ -557,7 +489,7 @@ dependencies = [
  "either",
  "fst",
  "hir",
- "itertools",
+ "itertools 0.15.0",
  "line-index",
  "macros",
  "memchr",
@@ -567,7 +499,6 @@ dependencies = [
  "rayon",
  "rustc-hash 2.1.2",
  "salsa",
- "salsa-macros",
  "smallvec",
  "span",
  "stdx",
@@ -651,6 +582,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -719,7 +659,7 @@ dependencies = [
  "hir-expand",
  "ide-db",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "proc-macro-api",
  "project-model",
  "span",
@@ -971,7 +911,6 @@ dependencies = [
  "cobs",
  "embedded-io 0.4.0",
  "embedded-io 0.6.1",
- "heapless",
  "serde",
 ]
 
@@ -1028,7 +967,7 @@ dependencies = [
  "cargo_metadata",
  "cfg",
  "intern",
- "itertools",
+ "itertools 0.15.0",
  "la-arena",
  "paths",
  "rustc-hash 2.1.2",
@@ -1043,15 +982,6 @@ dependencies = [
  "toolchain",
  "tracing",
  "triomphe",
-]
-
-[[package]]
-name = "query-group-macro"
-version = "0.0.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1221,9 +1151,9 @@ dependencies = [
 
 [[package]]
 name = "rowan"
-version = "0.15.18"
+version = "0.15.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62f509095fc8cc0c8c8564016771d458079c11a8d857e65861f045145c0d3208"
+checksum = "a2441aaccb50f4267d4f0f58b21e0138e96a449f361ed57a2673a83c9bca0772"
 dependencies = [
  "countme",
  "hashbrown 0.14.5",
@@ -1267,15 +1197,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1283,9 +1204,9 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "salsa"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "adfc1e32b8d1a486e3a45a5480fb5dca7912f49262a8916a67378064da4fe1ab"
+checksum = "ffbaab832e2ea754afda4a738f987dd1e8bd30c9e5d8c981ee6a3934386095e2"
 dependencies = [
  "boxcar",
  "crossbeam-queue",
@@ -1304,20 +1225,21 @@ dependencies = [
  "smallvec",
  "thin-vec",
  "tracing",
+ "triomphe",
  "typeid",
 ]
 
 [[package]]
 name = "salsa-macro-rules"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67dad477a3e3a484a7c2311c1d25160fb270214981be24022de7de8a206a3300"
+checksum = "de6872462ac73d39969a836273c24163e6a26a4e08f5114fcd80e25af30ea9c6"
 
 [[package]]
 name = "salsa-macros"
-version = "0.27.0"
+version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "943f70e101fb3bd599960e79e719e70d85142730e5b45f3269246086ed218562"
+checksum = "76bc78ffaf65b1a9175818592c5130aa10b1bb245a905722fd4db87cea8a8457"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1442,15 +1364,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spin"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
 name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1462,7 +1375,7 @@ version = "0.0.0"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
- "itertools",
+ "itertools 0.15.0",
  "jod-thread",
  "libc",
  "miow",
@@ -1497,7 +1410,7 @@ name = "syntax"
 version = "0.0.0"
 dependencies = [
  "either",
- "itertools",
+ "itertools 0.15.0",
  "parser",
  "rowan",
  "rustc-hash 2.1.2",
@@ -1673,7 +1586,6 @@ name = "toolchain"
 version = "0.0.0"
 dependencies = [
  "camino",
- "home",
 ]
 
 [[package]]
@@ -1749,6 +1661,10 @@ name = "triomphe"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd69c5aa8f924c7519d6372789a74eac5b94fb0f8fcf0d4a97eb0bfc3e785f39"
+dependencies = [
+ "serde",
+ "stable_deref_trait",
+]
 
 [[package]]
 name = "tt"
@@ -1801,7 +1717,7 @@ dependencies = [
  "hir-expand",
  "ide-db",
  "intern",
- "itertools",
+ "itertools 0.14.0",
  "load-cargo",
  "parser",
  "proc-macro-api",

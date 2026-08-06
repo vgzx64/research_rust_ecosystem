@@ -77,11 +77,8 @@ fn analyze_crate(
     krate: Crate,
     result: &mut AnalysisResult,
 ) -> Result<()> {
-    let modules = krate.modules(db);
-
-    for module in modules {
-        analyze_module(db, vfs, project_root, module, result)?;
-    }
+    let root_module = krate.root_module(db);
+    analyze_module(db, vfs, project_root, root_module, result)?;
 
     // Analyze unsafe trait impls for this crate
     let impls = hir::Impl::all_in_crate(db, krate);
