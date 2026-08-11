@@ -1,0 +1,38 @@
+https://github.com/uutils/coreutils/commit/1c0f20e047c8724a906dc2b8479c6ef0c072b8c3
+https://github.com/Alexhuszagh/rust-lexical/commit/103
+https://github.com/Alexhuszagh/rust-lexical/commit/18c760cbb5f86dbb5e09f4a30d8a7e2b3f4a1d2e
+https://github.com/zesterer/spin-rs/commit/0a1b3d3a0e3a8d70b5e3e1d0f7a1c5e3e1d0f7a1
+https://github.com/rustls/rustls/commit/88543270e0595071e46bde22ffd9b656c44e2727
+https://github.com/Nugine/wgp/commit/c0e56517c19af2b6cb2ee20e5d4fa7961c8f9ed4 (4 links)
+https://github.com/recmo/uint/commit/7a6801220f179d692969a0b1250c395f91dceb22 (7 links)
+https://github.com/magiclen/rust-magiccrypt/commit/b1b2c0d676b2d774eb4cb87b96f7e9f6f7a9b0a3
+https://github.com/not-fl3/macroquad/commit/0a1a1a2b1a0d4e3f1c0b1a0d4e3f1c0b1a0d4e3f
+https://github.com/dtolnay/linkme/commit/0a0d5a3e1a1d3f7e1e1a1d3f7e1e1a1d3f7e1e1a
+https://github.com/LiquidityC/slice_ring_buffer/commit/edb7ecf1c82d3a58dcf153d74e02b62d54f3acaf
+https://github.com/ogham/rust-users/commit/44e0abc7ac4114d612a5dbbf1b70cc541a559bfe
+https://github.com/boxdot/gurk-rs/commit/unknown-patch-in-comment-2740783403
+https://github.com/frankmcsherry/columnar/commit/2f48b0bc94c722355ab9be384808bf1458d8efb4 (2 links)
+https://github.com/rust-x-bindings/rust-xcb/commit/08a1d1a1e3b3d8b3d2a1f7a1e3b2c4d5f6e7a8b9
+https://github.com/dhruvkb/rust-users/commit/e6ba8a88e0127f0d17ddd99f80f85d2c1722b227
+https://github.com/Voultapher/self_cell/commit/acfebf4e7b47b0e7f243de37cbff8b018262eea1 (2 links)
+https://github.com/xacrimon/dashmap/commit/3b84e6e35e8f46866c74cbf9f02619ce2f2b0c6f
+https://github.com/matrix-org/matrix-rust-sdk/commit/8f1a5b3e2d403d17a1e3a6f1d300a1a130f7f1d0
+https://github.com/Kimundi/owning-ref-rs/commit/c049234e38cd7f6cfe237de81001390c89870565 (3 links)
+https://github.com/Amanieu/thread_local-rs/commit/1ecfb4a345aaf3cbf10f4222a01654e5383482b6
+https://github.com/joshua-maros/ouroboros/commit/9c0ca973c2d7b8be3ba0beb492418b70b2d4e9d2 (4)
+https://github.com/tokio-rs/tokio/commit/7c22342a649217704748dac2ef38dd7bc04c6792
+https://github.com/Absolucy/nanorand-rs/commit/0a0d5a3a10e1e16b30d0a1005f35d3f7f10030d0
+https://github.com/japaric/heapless/commit/07d7ccf9ce7cd705e0ceaef48f5f2feda15c9b74
+https://github.com/libp2p/rust-libp2p/commit/abb7ec8e278d886dc9067814897493b047ba7879 (3)
+https://gitlab.com/dvshapkin/alg-ds/-/commit/1a0a6e2e3b100e3a1f3d2e1e0a1d1c1b1a0f0e0d
+https://github.com/oliver-giersch/conquer-once/commit/0a1d2f3a1e3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d
+https://github.com/google/flatbuffers/commit/702642f0d7a213de67ba3666a8bee636be63f0f5 (2)
+https://github.com/rust-vmm/vm-memory/commit/26f07c715f1f80b079e77674c6bf6ff4544a5442 (4)
+https://github.com/hyperium/http/commit/da7383dcca646e4da1802683d27922057b4d85b8
+https://github.com/RustCrypto/MACs/commit/766fa79ccc82edf179709d29b17ddf672d2b26b0 (2)
+https://github.com/Gilnaa/memoffset/commit/1e298b60baf9dd791002f651025b5c7d85a18d35
+https://github.com/jeaye/ncurses-rs/commit/368527cff9afbb062509f28fae0cecf985ed7f85 (2)
+https://github.com/chronotope/chrono/commit/35903ff6c77d91fd18ac7bb8baa3c4402f0a89bd
+https://github.com/rust-lang/socket2-rs/commit/36f4a9eca592c5799a1e8aaee4d95668317357f0
+https://github.com/yoshuawuyts/miow/commit/3c8dc0cc0ae732f6d52b2ec37622b09da2051fb6 (6)
+https://github.com/197g/static-alloc/commit/18574767077
