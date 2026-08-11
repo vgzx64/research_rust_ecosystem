@@ -4,6 +4,8 @@ import logging
 from sqlite3 import Error
 import os
 
+import pandas as pd
+
 conn = None
 ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
 DB_PATH  = f"{ROOT_PATH}/.."
@@ -68,7 +70,9 @@ def write_database(table, df):
         if df is not None and not df.empty:
             with conn:
                 # ---appending each function data to the tables---
-                df = df.map(str)
+                # Persist None for NaN instead of the literal string "nan",
+                # which would otherwise break downstream numeric parsing.
+                df = df.map(lambda x: None if pd.isna(x) else str(x))
                 df.to_sql(name=table, con=conn, if_exists="append", index=False)
     except Exception as e:
         print('Problem while writing to database!', e)
